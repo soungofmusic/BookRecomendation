@@ -2,7 +2,7 @@ from flask import Flask, request, jsonify, Response, stream_with_context
 from flask_cors import CORS
 import requests
 import json
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from collections import Counter
 try:
     from llama_cpp import Llama
@@ -98,7 +98,7 @@ class BookRecommender:
             print(f"Error fetching book details: {e}")
             return None
 
-    def calculate_reading_time(self, page_count: int | None) -> dict:
+    def calculate_reading_time(self, page_count: Optional[int]) -> dict:
         """Calculate estimated reading time based on page count"""
         if not page_count:
             return {'hours': None, 'minutes': None}
@@ -281,7 +281,7 @@ Aim for 4-6 sentences that paint a vivid picture of the reading experience. [/IN
 
             response = self.llm(
                 prompt,
-                max_tokens=512,  # Increased for longer responses
+                max_tokens=512,
                 temperature=0.75,
                 stop=["[/INST]", "</s>"],
                 top_p=0.9,
@@ -306,7 +306,6 @@ Aim for 4-6 sentences that paint a vivid picture of the reading experience. [/IN
             return self.generate_explanation(book, input_books, similarity_score)
 
         try:
-            # Gather matching information
             shared_subjects = set(book.get('subjects', [])) & set(sum([b.get('subjects', []) for b in input_books], []))
             book_year = int(book.get('first_publish_date', '0')[:4]) if book.get('first_publish_date') else None
             input_years = [int(b.get('first_publish_date', '0')[:4]) for b in input_books if b.get('first_publish_date')]
@@ -367,13 +366,8 @@ def get_recommendations():
             input_book_ids = set()
             input_authors = set()
 
-            yield f"data: {json.dumps({
-                'status': 'processing',
-                'stage': 'input_processing',
-                'processed': 0,
-                'total': len(book_titles),
-                'recommendations': []
-            })}\n\n"
+            yield f"data: {json.dumps({'status': 'completed', 'recommendations': final_recommendations})}\n\n"
+            
 
             print("\n=== Processing Input Books ===")
             for idx, title in enumerate(book_titles):
@@ -392,13 +386,7 @@ def get_recommendations():
                         input_books.append(book_details)
                         print(f"Processed input book: {book.get('title')}")
 
-                yield f"data: {json.dumps({
-                    'status': 'processing',
-                    'stage': 'input_processing',
-                    'processed': idx + 1,
-                    'total': len(book_titles),
-                    'recommendations': []
-                })}\n\n"
+                yield f"data: {json.dumps({'status': 'processing', 'stage': 'input_processing', 'processed': idx + 1, 'total': len(book_titles), 'recommendations': []})}\n\n"
 
             all_subjects = []
             for book in input_books:
@@ -409,13 +397,16 @@ def get_recommendations():
             seen_books = set()
             recommendations = []
 
-            yield f"data: {json.dumps({
+            data_dict = {
                 'status': 'processing',
                 'stage': 'finding_recommendations',
                 'processed': 0,
                 'total': len(common_subjects),
                 'recommendations': []
-            })}\n\n"
+            }
+
+            json_data = json.dumps(data_dict)
+            yield f"data: {json_data}\n\n"
 
             # During finding recommendations, only do basic explanation and reading rec
             for subject_idx, (subject, _) in enumerate(common_subjects):
@@ -470,13 +461,16 @@ def get_recommendations():
                                     reverse=True
                                 )[:2]
 
-                                yield f"data: {json.dumps({
+                                data_dict = {
                                     'status': 'processing',
                                     'stage': 'finding_recommendations',
                                     'processed': subject_idx + 1,
                                     'total': len(common_subjects),
                                     'recommendations': current_recommendations
-                                })}\n\n"
+                                }
+
+                                json_data = json.dumps(data_dict)
+                                yield f"data: {json_data}\n\n"
 
             # Get final filtered recommendations
             filtered_recommendations = apply_filters(recommendations, filters)
@@ -487,13 +481,16 @@ def get_recommendations():
             )[:2]
 
             print("\n=== Enhancing final recommendations with Llama ===")
-            yield f"data: {json.dumps({
+            data_dict = {
                 'status': 'processing',
                 'stage': 'enhancing_recommendations',
                 'processed': 0,
                 'total': len(final_recommendations),
                 'recommendations': final_recommendations
-            })}\n\n"
+            }
+
+            json_data = json.dumps(data_dict)
+            yield f"data: {json_data}\n\n"
 
             # Now use Llama for the final 2 recommendations
             for idx, recommendation in enumerate(final_recommendations):
@@ -511,22 +508,29 @@ def get_recommendations():
                         if why_read:
                             recommendation['why_read'] = why_read
 
-                    yield f"data: {json.dumps({
+                    data_dict = {
                         'status': 'processing',
                         'stage': 'enhancing_recommendations',
                         'processed': idx + 1,
                         'total': len(final_recommendations),
                         'recommendations': final_recommendations
-                    })}\n\n"
+                    }
+
+                    json_data = json.dumps(data_dict)
+                    yield f"data: {json_data}\n\n"
+
 
                 except Exception as e:
                     print(f"Error enhancing recommendation: {e}")
                     # Keep existing basic explanation if Llama fails
 
-            yield f"data: {json.dumps({
+            data_dict = {
                 'status': 'completed',
                 'recommendations': final_recommendations
-            })}\n\n"
+            }
+
+            json_data = json.dumps(data_dict)
+            yield f"data: {json_data}\n\n"
 
         except Exception as e:
             print(f"Error generating recommendations: {e}")
