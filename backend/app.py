@@ -358,6 +358,9 @@ def get_recommendations():
             filters = data.get('filters', {})
             print(f"\n--- Starting recommendation process for books: {book_titles} ---")
 
+            # Initialize final_recommendations to avoid referencing it before assignment
+            final_recommendations = []
+
             if not book_titles:
                 yield f"data: {json.dumps({'error': 'No books provided'})}\n\n"
                 return
@@ -365,9 +368,6 @@ def get_recommendations():
             input_books = []
             input_book_ids = set()
             input_authors = set()
-
-            yield f"data: {json.dumps({'status': 'completed', 'recommendations': final_recommendations})}\n\n"
-            
 
             print("\n=== Processing Input Books ===")
             for idx, title in enumerate(book_titles):
@@ -386,7 +386,14 @@ def get_recommendations():
                         input_books.append(book_details)
                         print(f"Processed input book: {book.get('title')}")
 
-                yield f"data: {json.dumps({'status': 'processing', 'stage': 'input_processing', 'processed': idx + 1, 'total': len(book_titles), 'recommendations': []})}\n\n"
+                data_dict = {
+                    'status': 'processing',
+                    'stage': 'input_processing',
+                    'processed': idx + 1,
+                    'total': len(book_titles),
+                    'recommendations': []
+                }
+                yield f"data: {json.dumps(data_dict)}\n\n"
 
             all_subjects = []
             for book in input_books:
@@ -405,8 +412,7 @@ def get_recommendations():
                 'recommendations': []
             }
 
-            json_data = json.dumps(data_dict)
-            yield f"data: {json_data}\n\n"
+            yield f"data: {json.dumps(data_dict)}\n\n"
 
             # During finding recommendations, only do basic explanation and reading rec
             for subject_idx, (subject, _) in enumerate(common_subjects):
@@ -442,7 +448,6 @@ def get_recommendations():
                                     'year': book.get('first_publish_year'),
                                     'genres': book.get('subject', [])[:5] if book.get('subject') else [],
                                     'similarity_score': round(similarity_score * 100, 1),
-                                    # Store only basic_explanation and basic_recommendation here, llama later
                                     'explanation': explanation,
                                     'why_read': None,
                                     'cover_url': f"https://covers.openlibrary.org/b/id/{cover_id}-L.jpg" if cover_id else None,
@@ -469,8 +474,7 @@ def get_recommendations():
                                     'recommendations': current_recommendations
                                 }
 
-                                json_data = json.dumps(data_dict)
-                                yield f"data: {json_data}\n\n"
+                                yield f"data: {json.dumps(data_dict)}\n\n"
 
             # Get final filtered recommendations
             filtered_recommendations = apply_filters(recommendations, filters)
@@ -489,8 +493,7 @@ def get_recommendations():
                 'recommendations': final_recommendations
             }
 
-            json_data = json.dumps(data_dict)
-            yield f"data: {json_data}\n\n"
+            yield f"data: {json.dumps(data_dict)}\n\n"
 
             # Now use Llama for the final 2 recommendations
             for idx, recommendation in enumerate(final_recommendations):
@@ -516,9 +519,7 @@ def get_recommendations():
                         'recommendations': final_recommendations
                     }
 
-                    json_data = json.dumps(data_dict)
-                    yield f"data: {json_data}\n\n"
-
+                    yield f"data: {json.dumps(data_dict)}\n\n"
 
                 except Exception as e:
                     print(f"Error enhancing recommendation: {e}")
@@ -529,8 +530,7 @@ def get_recommendations():
                 'recommendations': final_recommendations
             }
 
-            json_data = json.dumps(data_dict)
-            yield f"data: {json_data}\n\n"
+            yield f"data: {json.dumps(data_dict)}\n\n"
 
         except Exception as e:
             print(f"Error generating recommendations: {e}")
