@@ -1,4 +1,6 @@
 import React, { useState, useRef, useCallback } from 'react';
+import { cacheService, preloadImage } from '../services/cache';
+import { GlowingButton } from './GlowingButton';
 
 interface Book {
   id: string;
@@ -15,7 +17,7 @@ interface SuggestionState {
   error: string | null;
 }
 
-const BookInput: React.FC<{
+export const BookInput: React.FC<{
   onSubmit: (books: string[]) => void;
   isLoading: boolean;
 }> = ({ onSubmit, isLoading }) => {
@@ -35,30 +37,50 @@ const BookInput: React.FC<{
       return;
     }
 
+    const cacheKey = `search:${query}`;
+    const cachedResults = cacheService.get<Book[]>(cacheKey);
+    
+    if (cachedResults) {
+      setSuggestions({ loading: false, data: cachedResults, error: null });
+      return;
+    }
+
     setSuggestions(prev => ({ ...prev, loading: true }));
+    
     try {
       const response = await fetch(
         `https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=5`
       );
 
-      if (!response.ok) {
-        throw new Error('Failed to fetch books');
-      }
+      if (!response.ok) throw new Error('Failed to fetch books');
 
       const data = await response.json();
-      const formattedBooks: Book[] = data.docs
-        .slice(0, 5)
-        .map((book: any) => ({
-          id: book.key,
-          title: book.title || 'Unknown Title',
-          author: book.author_name?.[0] || 'Unknown Author',
-          year: book.first_publish_year,
-          cover: book.cover_i 
-            ? `https://covers.openlibrary.org/b/id/${book.cover_i}-M.jpg` 
-            : undefined,
-          genres: book.subject?.slice(0, 3) || []
-        }));
+      const formattedBooks: Book[] = await Promise.all(
+        data.docs.slice(0, 5).map(async (book: any) => {
+          const coverUrl = book.cover_i 
+            ? `https://covers.openlibrary.org/b/id/${book.cover_i}-M.jpg`
+            : null;
 
+          if (coverUrl) {
+            try {
+              await preloadImage(coverUrl);
+            } catch (error) {
+              console.warn(`Failed to preload image for ${book.title}`);
+            }
+          }
+
+          return {
+            id: book.key,
+            title: book.title || 'Unknown Title',
+            author: book.author_name?.[0] || 'Unknown Author',
+            year: book.first_publish_year,
+            cover: coverUrl,
+            genres: book.subject?.slice(0, 3) || []
+          };
+        })
+      );
+
+      cacheService.set(cacheKey, formattedBooks);
       setSuggestions({
         loading: false,
         data: formattedBooks,
@@ -88,20 +110,12 @@ const BookInput: React.FC<{
     }, 300);
   }, [bookInputs]);
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, index: number) => {
-    if (e.key === 'Enter' && index < 4) {
-      e.preventDefault();
-      inputRefs.current[index + 1]?.focus();
-    }
-  };
-
   const handleSuggestionSelect = (index: number, book: Book) => {
     const newInputs = [...bookInputs];
     newInputs[index] = book.title;
     setBookInputs(newInputs);
     setSuggestions({ loading: false, data: [], error: null });
 
-    // Move focus to next input if available
     if (index < 4) {
       setTimeout(() => {
         inputRefs.current[index + 1]?.focus();
@@ -113,8 +127,9 @@ const BookInput: React.FC<{
     <div className="max-w-2xl mx-auto p-4">
       <form onSubmit={(e) => { 
         e.preventDefault();
-        if (bookInputs.every(book => book.trim())) {
-          onSubmit(bookInputs);
+        const validBooks = bookInputs.filter(book => book.trim());
+        if (validBooks.length > 0) {
+          onSubmit(validBooks);
         }
       }}>
         <div className="space-y-4">
@@ -127,7 +142,6 @@ const BookInput: React.FC<{
                   value={input}
                   onChange={(e) => handleInputChange(index, e.target.value)}
                   onFocus={() => setActiveIndex(index)}
-                  onKeyDown={(e) => handleKeyDown(e, index)}
                   placeholder={`Enter book ${index + 1}`}
                   className={`
                     w-full p-4 rounded-lg
@@ -136,10 +150,8 @@ const BookInput: React.FC<{
                     ${activeIndex === index ? 'border-blue-500 ring-4 ring-blue-200' : 'border-gray-200'}
                     focus:border-blue-500 focus:ring-4 focus:ring-blue-200
                     hover:shadow-lg
-                    ${suggestions.loading && activeIndex === index ? 'pr-12' : 'pr-4'}
                   `}
                 />
-
                 {suggestions.loading && activeIndex === index && (
                   <div className="absolute right-4 top-1/2 -translate-y-1/2">
                     <div className="animate-spin rounded-full h-5 w-5 border-2 border-blue-500 border-t-transparent" />
@@ -156,16 +168,23 @@ const BookInput: React.FC<{
                       className="p-4 hover:bg-blue-50 cursor-pointer border-b last:border-b-0"
                     >
                       <div className="flex items-start space-x-3">
-                        {book.cover && (
-                          <img
-                            src={book.cover}
-                            alt={book.title}
-                            className="w-12 h-16 object-cover rounded"
-                            onError={(e) => {
-                              (e.target as HTMLImageElement).style.display = 'none';
-                            }}
-                          />
-                        )}
+                        <div className="flex-shrink-0 w-12 h-16 bg-gray-100 rounded overflow-hidden">
+                          {book.cover ? (
+                            <img
+                              src={book.cover}
+                              alt={book.title}
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                const target = e.target as HTMLImageElement;
+                                target.src = `data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="48" height="64" viewBox="0 0 48 64"><rect width="48" height="64" fill="%23f3f4f6"/><text x="50%" y="50%" font-family="Arial" font-size="24" fill="%236b7280" dominant-baseline="middle" text-anchor="middle">${book.title[0]}</text></svg>`;
+                              }}
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center bg-blue-100 text-blue-500 font-medium">
+                              {book.title[0]}
+                            </div>
+                          )}
+                        </div>
                         <div>
                           <div className="font-medium">{book.title}</div>
                           <div className="text-sm text-gray-600">
@@ -190,32 +209,17 @@ const BookInput: React.FC<{
                   ))}
                 </div>
               )}
-
-              {suggestions.error && activeIndex === index && (
-                <div className="mt-1 text-sm text-red-500">
-                  {suggestions.error}
-                </div>
-              )}
             </div>
           ))}
         </div>
 
-        <button
+        <GlowingButton
           type="submit"
-          disabled={isLoading || bookInputs.some(book => !book.trim())}
-          className="w-full mt-6 py-3 px-4 bg-blue-500 text-white rounded-lg
-                   hover:bg-blue-600 disabled:bg-gray-400 disabled:cursor-not-allowed
-                   transition-colors duration-200"
+          disabled={isLoading || !bookInputs.some(book => book.trim())}
+          loading={isLoading}
         >
-          {isLoading ? (
-            <div className="flex items-center justify-center space-x-2">
-              <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
-              <span>Getting Recommendations...</span>
-            </div>
-          ) : (
-            'Get Recommendations'
-          )}
-        </button>
+          Get Recommendations
+        </GlowingButton>
       </form>
     </div>
   );

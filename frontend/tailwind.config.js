@@ -32,9 +32,15 @@ module.exports = {
         buttonGlow: {
           '0%, 100%': { boxShadow: '0 0 15px 0 rgba(59, 130, 246, 0.5)' },
           '50%': { boxShadow: '0 0 30px 5px rgba(59, 130, 246, 0.7)' },
-          }
+        },
+        turnPage: {
+          '0%': { transform: 'rotateY(0deg)' },
+          '25%': { transform: 'rotateY(-20deg)' },
+          '50%': { transform: 'rotateY(-180deg)' },
+          '75%': { transform: 'rotateY(-20deg)' },
+          '100%': { transform: 'rotateY(0deg)' },
         }
-      }, 
+      },
       animation: {
         shake: 'shake 0.82s cubic-bezier(.36,.07,.19,.97) both',
         fadeIn: 'fadeIn 0.5s ease-out forwards',
@@ -42,8 +48,10 @@ module.exports = {
         shimmer: 'shimmer 2s infinite linear',
         shimmerButton: 'shimmerButton 8s ease-in-out infinite',
         pulseScale: 'pulseScale 2s ease-in-out infinite',
-        buttonGlow: 'buttonGlow 2s ease-in-out infinite'
+        buttonGlow: 'buttonGlow 2s ease-in-out infinite',
+        turnPage: 'turnPage 1.5s ease-in-out infinite'
       }
+    },
   },
   plugins: [
     require('@tailwindcss/forms'),
