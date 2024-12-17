@@ -1,6 +1,0 @@
-{
-  "dependencies": {
-    "@tailwindcss/forms": "^0.5.9",
-    "tailwind-scrollbar": "^3.1.0"
-  }
-}
