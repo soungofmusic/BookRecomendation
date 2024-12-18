@@ -19,7 +19,10 @@ cors = CORS(app, resources={
     r"/*": {
         "origins": ["https://lemon-water-065707a1e.4.azurestaticapps.net"],
         "methods": ["GET", "POST", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Connection"]
+        "allow_headers": ["Content-Type", "Connection", "Accept"],
+        "expose_headers": ["Content-Type", "Transfer-Encoding"],
+        "supports_credentials": True,
+        "max_age": 600
     }
 })
 
