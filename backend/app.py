@@ -13,6 +13,9 @@ from dotenv import load_dotenv
 from groq import Groq
 
 load_dotenv()
+groq_api_key = os.environ.get("GROQ_API_KEY")
+if not groq_api_key:
+    print("Warning: GROQ_API_KEY not found in environment variables")
 
 app = Flask(__name__)
 cors = CORS(app, resources={
