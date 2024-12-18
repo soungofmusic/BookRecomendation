@@ -37,9 +37,7 @@ function App() {
     
     try {
       console.log('Sending books to backend:', books);
-      
-      const API_URL = process.env.VITE_API_URL || 'http://localhost:5000';
-      const response = await fetch(`${API_URL}/api/recommend`, {
+      const response = await fetch('https://book-recommender-api-affpgxcqgah8cvah.westus-01.azurewebsites.net/api/recommend', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
