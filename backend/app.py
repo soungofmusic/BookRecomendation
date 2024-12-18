@@ -15,11 +15,22 @@ from groq import Groq
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app, origins=["https://lemon-water-065707a1e.4.azurestaticapps.net"])
+cors = CORS(app, resources={
+    r"/*": {
+        "origins": ["https://lemon-water-065707a1e.4.azurestaticapps.net"],
+        "methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Content-Type"]
+    }
+})
+
 
 OPEN_LIBRARY_SEARCH = "https://openlibrary.org/search.json"
 OPEN_LIBRARY_WORKS = "https://openlibrary.org/works/"
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
+
+@app.route('/')
+def home():
+    return "Book Recommendation API is running!"
 
 class RateLimiter:
     def __init__(self, requests_per_day: int, tokens_per_minute: int):
