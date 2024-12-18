@@ -15,7 +15,7 @@ from groq import Groq
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, origins=["https://book-recommender-frontend.azurestaticapps.net"])
 
 OPEN_LIBRARY_SEARCH = "https://openlibrary.org/search.json"
 OPEN_LIBRARY_WORKS = "https://openlibrary.org/works/"
