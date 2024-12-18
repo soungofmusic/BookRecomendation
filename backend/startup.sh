@@ -1,1 +1,3 @@
-gunicorn --bind=0.0.0.0 --timeout 600 app:app
+pip install 'numpy==1.24.3'
+pip install 'pandas==1.5.3'
+python app.py
