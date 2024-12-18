@@ -37,7 +37,7 @@ function App() {
     
     try {
       console.log('Sending books to backend:', books);
-      const response = await fetch('https://book-recommender-api-affpgxcqgah8cvah.westus-01.azurewebsites.net/api/recommend', {
+      const response = await fetch('https://book-recommender-api-affpgxcqgah8cvah.westus-01.azurewebsites.net', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
