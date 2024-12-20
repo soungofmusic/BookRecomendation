@@ -324,6 +324,62 @@ class BookRecommender:
 
     def can_make_request(self, estimated_tokens: int) -> bool:
         return self.rate_limiter.can_make_request(estimated_tokens)
+     def generate_similarity_explanation_with_ai(self, book: Dict, input_books: List[Dict], similarity_score: float) -> str:
+    shared_subjects = set(book.get('subjects', [])) & set(sum([b.get('subjects', []) for b in input_books], []))
+
+    book_year = self.extract_year(book.get('first_publish_date', ''))
+    input_years = []
+    for input_book in input_books:
+        year = self.extract_year(input_book.get('first_publish_date', ''))
+        if year:
+            input_years.append(year)
+
+    avg_year = sum(input_years) / len(input_years) if input_years else None
+
+    prompt = f"""Analyze why this book matches the reader's preferences:
+
+Book Details:
+Title: {book.get('title', '')}
+Author: {book.get('author_name', ['Unknown'])[0] if book.get('author_name') else 'Unknown'}
+Year: {book_year if book_year else 'Unknown'}
+Shared Genres: {', '.join(list(shared_subjects)[:3])}
+Similarity Score: {similarity_score:.1f}%
+
+Reader's Preferences:
+- Favorite Genres: {', '.join(list(set(sum([b.get('subjects', [])[:3] for b in input_books], []))))}
+- Preferred Era: Around {int(avg_year) if avg_year else 'Unknown'}
+
+Explain why this book would appeal to the reader based on these matches. Use 2nd person like you and your. Focus on specific connections and shared elements. Keep it concise (4-5 sentences) and analytical."""
+
+    response = self.call_groq_api(prompt, max_tokens=256)
+    if response:
+        return response.strip()
+    return self.generate_explanation(book, input_books, similarity_score)
+
+def generate_reading_recommendation_with_ai(self, book: Dict, input_books: List[Dict]) -> str:
+    prompt = f"""Create a detailed and compelling recommendation for why someone should read this book:
+
+Title: {book.get('title', '')}
+Author: {book.get('author_name', ['Unknown'])[0] if book.get('author_name') else 'Unknown'}
+Year: {book.get('first_publish_date', 'Unknown')}
+Genres: {', '.join(book.get('subjects', [])[:5]) if book.get('subjects') else 'Unknown'}
+
+Create an engaging recommendation that covers:
+1. The unique aspects and standout features of this book
+2. The emotional journey and reading experience it offers
+3. The book's cultural or literary significance
+4. Who would particularly enjoy or benefit from reading it
+5. What lasting impact or insights readers can expect to gain
+
+Write in an enthusiastic, persuasive tone that makes readers excited to start the book.
+Use 2nd person like you and your.
+Provide specific details and compelling reasons.
+Aim for 4-6 sentences that paint a vivid picture of the reading experience."""
+
+    response = self.call_groq_api(prompt)
+    if response:
+        return response.strip()
+    return self.generate_reading_recommendation(book, input_books)
 
 recommender = BookRecommender()
 
