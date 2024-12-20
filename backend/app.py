@@ -1,5 +1,6 @@
 # app.py
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 import requests
 import json
 import time
@@ -16,15 +17,17 @@ load_dotenv()
 app = Flask(__name__)
 CORS(app, 
      resources={
-         r"/api/*": {  # Apply to all API routes
+         r"/*": {  # Apply to all routes, not just /api/*
              "origins": [
-                 "https://lemon-water-065707a1e.4.azurestaticapps.net"
+                 "https://lemon-water-065707a1e.4.azurestaticapps.net",
+                 # Add any development origins you need
              ],
              "methods": ["GET", "POST", "OPTIONS"],
              "allow_headers": ["Content-Type", "Authorization"],
              "expose_headers": ["Content-Length", "X-Total-Count"],
              "supports_credentials": False,
-             "max_age": 3600  # Cache preflight requests for 1 hour
+             "max_age": 3600,
+             "allow_headers": "*"  # Allow all headers during development
          }
      })
 
