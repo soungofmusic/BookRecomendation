@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import BookInput from './components/BookInput';
 import Recommendations from './components/Recommendations';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Alert, AlertDescription } from './components/Alert';
 
 interface Book {
   id: string;
@@ -127,10 +127,13 @@ function App() {
 
         {error && (
           <Alert variant="destructive" className="mb-8 animate-fadeIn">
-            <AlertTitle>Error</AlertTitle>
-            <AlertDescription className="mt-2">
+            <AlertDescription>
               {error}
-              {retryCount > 0 && <span className="block mt-1">Retry attempt {retryCount}... Will keep trying until connected.</span>}
+              {retryCount > 0 && (
+                <div className="mt-1">
+                  Retry attempt {retryCount}... Will keep trying until connected.
+                </div>
+              )}
             </AlertDescription>
           </Alert>
         )}
