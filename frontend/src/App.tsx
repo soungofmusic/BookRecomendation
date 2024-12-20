@@ -52,8 +52,10 @@ function App() {
         const response = await fetch('https://book-recommender-api-affpgxcqgah8cvah.westus-01.azurewebsites.net/api/recommend', {
           method: 'POST',
           mode: 'cors',
+          credentials: 'include',
           headers: {
             'Content-Type': 'application/json',
+            'Accept': 'application/json'
           },
           body: JSON.stringify({ books })
         });
