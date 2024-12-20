@@ -22,10 +22,7 @@ function App() {
   const [isLoading, setIsLoading] = useState<boolean | string>(false);
   const [error, setError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
-  const [requestTimeout, setRequestTimeout] = useState(60);
-  // No maximum retry limit
   
-  // Loading state message based on time elapsed
   const getLoadingMessage = (elapsedTime: number) => {
     if (elapsedTime < 10) return "Searching for books...";
     if (elapsedTime < 20) return "Analyzing your preferences...";
@@ -53,18 +50,18 @@ function App() {
           return prev;
         });
       }, 1000);
+
       try {
+        console.log('Sending books to backend:', books);
         const response = await fetch('https://book-recommender-api-affpgxcqgah8cvah.westus-01.azurewebsites.net/api/recommend', {
           method: 'POST',
           mode: 'cors',
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ books }),
-          // Add timeout to prevent hanging requests
-          signal: AbortSignal.timeout(60000) // 60 second timeout for longer processing
+          body: JSON.stringify({ books })
         });
-
+    
         if (!response.ok) {
           throw new Error(`Server responded with status: ${response.status}`);
         }
@@ -81,41 +78,39 @@ function App() {
             data.recommendations[1] || null
           ]);
         }
+        
+        clearInterval(loadingUpdateInterval);
+        setIsLoading(false);
+        setRetryCount(0);
+
       } catch (error) {
         console.error('Error fetching recommendations:', error);
+        clearInterval(loadingUpdateInterval);
         
-        // Always retry on network errors
+        // Always retry on network errors or CORS issues
         if (error instanceof Error && 
-            (error.message.includes('Failed to fetch') || error.message.includes('network'))) {
+            (error.message.includes('Failed to fetch') || 
+             error.message.includes('network') ||
+             error.message.includes('CORS') ||
+             error.message.includes('blocked by CORS policy'))) {
           setRetryCount(attempt + 1);
+          setError('Connecting to recommendation service...');
           // Exponential backoff
           await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
           return makeRequest(attempt + 1);
         }
         
-        let errorMessage = 'Unable to get recommendations. ';
-        if (error instanceof Error) {
-          if (error.message.includes('Failed to fetch')) {
-            errorMessage += 'Please check your internet connection and try again.';
-          } else if (error.name === 'AbortError') {
-            errorMessage += 'Request timed out. Please try again.';
-          } else {
-            errorMessage += error.message;
-          }
-        }
-        
-        setError(errorMessage);
+        setError(error instanceof Error ? error.message : 'Failed to get recommendations');
         setRecommendations([null, null]);
+        setIsLoading(false);
       }
     };
 
     try {
       await makeRequest();
-          } finally {
-        clearInterval(loadingUpdateInterval);
-        setIsLoading(false);
-        setRetryCount(0);
-      }
+    } catch (error) {
+      console.error('Error in makeRequest:', error);
+    }
   };
 
   return (
