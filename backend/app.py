@@ -14,7 +14,19 @@ from groq import Groq
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app, origins=["https://lemon-water-065707a1e.4.azurestaticapps.net"], methods=["GET", "POST", "OPTIONS"], allow_headers=["Content-Type"])
+CORS(app, 
+     resources={
+         r"/api/*": {  # Apply to all API routes
+             "origins": [
+                 "https://lemon-water-065707a1e.4.azurestaticapps.net"
+             ],
+             "methods": ["GET", "POST", "OPTIONS"],
+             "allow_headers": ["Content-Type", "Authorization"],
+             "expose_headers": ["Content-Length", "X-Total-Count"],
+             "supports_credentials": False,
+             "max_age": 3600  # Cache preflight requests for 1 hour
+         }
+     })
 
 OPEN_LIBRARY_SEARCH = "https://openlibrary.org/search.json"
 OPEN_LIBRARY_WORKS = "https://openlibrary.org/works/"
