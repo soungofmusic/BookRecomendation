@@ -1,6 +1,5 @@
 # app.py
-from flask import Flask, request, jsonify, Response, stream_with_context
-from flask_cors import CORS, cross_origin
+from flask import Flask, request, jsonify
 import requests
 import json
 import time
@@ -16,18 +15,17 @@ load_dotenv()
 
 app = Flask(__name__)
 
-# Configure CORS
-CORS(app, origins=["https://lemon-water-065707a1e.4.azurestaticapps.net"], methods=["GET", "POST", "OPTIONS"], allow_headers=["Content-Type"])
-
 OPEN_LIBRARY_SEARCH = "https://openlibrary.org/search.json"
 OPEN_LIBRARY_WORKS = "https://openlibrary.org/works/"
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
-
 
 @app.route('/')
 def home():
     return "Book Recommendation API is running!"
 
+@app.route('/test', methods=['GET'])
+def test_endpoint():
+    return jsonify({"message": "hello"})
 
 class RateLimiter:
     def __init__(self, requests_per_day: int, tokens_per_minute: int):
@@ -42,12 +40,10 @@ class RateLimiter:
     def can_make_request(self, estimated_tokens: int) -> bool:
         with self.lock:
             current_time = datetime.now()
-
             # Reset daily counter if 24 hours have passed
             if current_time - self.last_reset > timedelta(days=1):
                 self.daily_requests = 0
                 self.last_reset = current_time
-
             # Reset minute counter if 1 minute has passed
             if current_time - self.minute_reset > timedelta(minutes=1):
                 self.minute_tokens = 0
@@ -60,7 +56,6 @@ class RateLimiter:
                 self.minute_tokens += estimated_tokens
                 return True
             return False
-
 
 def apply_filters(recommendations: List[Dict], filters: Dict) -> List[Dict]:
     """Apply filters to the list of book recommendations."""
@@ -97,7 +92,6 @@ def apply_filters(recommendations: List[Dict], filters: Dict) -> List[Dict]:
         filtered_books.append(book)
 
     return filtered_books
-
 
 class BookRecommender:
     def __init__(self):
@@ -372,199 +366,127 @@ Aim for 4-6 sentences that paint a vivid picture of the reading experience."""
             return response.strip()
         return self.generate_reading_recommendation(book, input_books)
 
-
 recommender = BookRecommender()
 
-
 @app.route('/api/recommend', methods=['POST'])
-@cross_origin(origins=["https://lemon-water-065707a1e.4.azurestaticapps.net"])
 def get_recommendations():
-    def generate():
-        try:
-            data = request.json
-            book_titles = data.get('books', [])
-            filters = data.get('filters', {})
-            print(f"\n--- Starting recommendation process for books: {book_titles} ---")
+    try:
+        data = request.json
+        book_titles = data.get('books', [])
+        filters = data.get('filters', {})
+        print(f"\n--- Starting recommendation process for books: {book_titles} ---")
 
-            if not book_titles:
-                yield f"data: {json.dumps({'error': 'No books provided'})}\n\n"
-                return
+        if not book_titles:
+            return jsonify({'error': 'No books provided'}), 400
 
-            input_books = []
-            input_book_ids = set()
-            input_authors = set()
+        input_books = []
+        input_book_ids = set()
+        input_authors = set()
 
-            print("\n=== Processing Input Books ===")
-            for idx, title in enumerate(book_titles):
-                response = requests.get(
-                    OPEN_LIBRARY_SEARCH,
-                    params={'q': title, 'fields': 'key,title,author_name,first_publish_year,subject,cover_i', 'limit': 1}
-                )
-                if response.ok and response.json().get('docs'):
-                    book = response.json()['docs'][0]
-                    book_id = book.get('key', '').split('/')[-1]
-                    input_book_ids.add(book_id)
-                    if book.get('author_name'):
-                        input_authors.add(book.get('author_name')[0])
-                    book_details = recommender.get_book_details(book_id)
-                    if book_details:
-                        input_books.append(book_details)
-                        print(f"Processed input book: {book.get('title')}")
+        # Process input books
+        for title in book_titles:
+            response = requests.get(
+                OPEN_LIBRARY_SEARCH,
+                params={'q': title, 'fields': 'key,title,author_name,first_publish_year,subject,cover_i', 'limit': 1}
+            )
+            if response.ok and response.json().get('docs'):
+                book = response.json()['docs'][0]
+                book_id = book.get('key', '').split('/')[-1]
+                input_book_ids.add(book_id)
+                if book.get('author_name'):
+                    input_authors.add(book.get('author_name')[0])
+                book_details = recommender.get_book_details(book_id)
+                if book_details:
+                    input_books.append(book_details)
 
-                data_dict = {
-                    'status': 'processing',
-                    'stage': 'input_processing',
-                    'processed': idx + 1,
-                    'total': len(book_titles),
-                    'recommendations': []
+        # Analyze subjects
+        all_subjects = []
+        for book in input_books:
+            subjects = book.get('subjects', [])
+            all_subjects.extend(subjects)
+
+        common_subjects = Counter(all_subjects).most_common(10)
+        seen_books = set()
+        recommendations = []
+
+        # Find recommendations
+        for (subject, _) in common_subjects:
+            response = requests.get(
+                OPEN_LIBRARY_SEARCH,
+                params={
+                    'q': f'subject:{subject}',
+                    'fields': 'key,title,author_name,first_publish_year,subject,cover_i',
+                    'limit': 20
                 }
-                yield f"data: {json.dumps(data_dict)}\n\n"
+            )
 
-            all_subjects = []
-            for book in input_books:
-                subjects = book.get('subjects', [])
-                all_subjects.extend(subjects)
+            if response.ok:
+                for book in response.json().get('docs', []):
+                    book_id = book.get('key', '').split('/')[-1]
+                    author = book.get('author_name', ['Unknown'])[0] if book.get('author_name') else 'Unknown'
 
-            common_subjects = Counter(all_subjects).most_common(10)
-            seen_books = set()
-            recommendations = []
+                    if book_id not in input_book_ids and book_id not in seen_books and author not in input_authors:
+                        book_details = recommender.get_book_details(book_id)
+                        if book_details:
+                            similarity_score = recommender.calculate_similarity_score(book_details, input_books)
+                            explanation = recommender.generate_explanation(book_details, input_books, similarity_score * 100)
+                            basic_reading_rec = recommender.generate_reading_recommendation(book_details, input_books)
 
-            data_dict = {
-                'status': 'processing',
-                'stage': 'finding_recommendations',
-                'processed': 0,
-                'total': len(common_subjects),
-                'recommendations': []
-            }
-            yield f"data: {json.dumps(data_dict)}\n\n"
+                            cover_id = book.get('cover_i')
+                            reading_time = recommender.calculate_reading_time(book_details.get('number_of_pages'))
 
-            for subject_idx, (subject, _) in enumerate(common_subjects):
-                response = requests.get(
-                    OPEN_LIBRARY_SEARCH,
-                    params={
-                        'q': f'subject:{subject}',
-                        'fields': 'key,title,author_name,first_publish_year,subject,cover_i',
-                        'limit': 20
-                    }
-                )
+                            recommendation = {
+                                'id': book_id,
+                                'title': book.get('title', ''),
+                                'author': author,
+                                'year': book.get('first_publish_year'),
+                                'genres': book.get('subject', [])[:5] if book.get('subject') else [],
+                                'similarity_score': round(similarity_score * 100, 1),
+                                'explanation': explanation,
+                                'why_read': basic_reading_rec,
+                                'cover_url': f"https://covers.openlibrary.org/b/id/{cover_id}-L.jpg" if cover_id else None,
+                                'page_count': book_details.get('number_of_pages'),
+                                'reading_time': reading_time
+                            }
 
-                if response.ok:
-                    for book in response.json().get('docs', []):
-                        book_id = book.get('key', '').split('/')[-1]
-                        author = book.get('author_name', ['Unknown'])[0] if book.get('author_name') else 'Unknown'
+                            recommendations.append(recommendation)
+                            seen_books.add(book_id)
 
-                        if book_id not in input_book_ids and book_id not in seen_books and author not in input_authors:
-                            book_details = recommender.get_book_details(book_id)
-                            if book_details:
-                                similarity_score = recommender.calculate_similarity_score(book_details, input_books)
-                                explanation = recommender.generate_explanation(book_details, input_books, similarity_score * 100)
-                                basic_reading_rec = recommender.generate_reading_recommendation(book_details, input_books)
+        # Filter and sort
+        filtered_recommendations = apply_filters(recommendations, filters)
+        final_recommendations = sorted(
+            filtered_recommendations,
+            key=lambda x: x['similarity_score'],
+            reverse=True
+        )[:2]
 
-                                cover_id = book.get('cover_i')
-                                reading_time = recommender.calculate_reading_time(book_details.get('number_of_pages'))
+        # Enhance recommendations with AI (optional)
+        for recommendation in final_recommendations:
+            try:
+                book_id = recommendation['id']
+                book_details = recommender.get_book_details(book_id)
+                if book_details:
+                    new_explanation = recommender.generate_similarity_explanation_with_ai(
+                        book_details, input_books, recommendation['similarity_score']
+                    )
+                    why_read = recommender.generate_reading_recommendation_with_ai(book_details, input_books)
 
-                                recommendation = {
-                                    'id': book_id,
-                                    'title': book.get('title', ''),
-                                    'author': author,
-                                    'year': book.get('first_publish_year'),
-                                    'genres': book.get('subject', [])[:5] if book.get('subject') else [],
-                                    'similarity_score': round(similarity_score * 100, 1),
-                                    'explanation': explanation,
-                                    'why_read': basic_reading_rec,
-                                    'cover_url': f"https://covers.openlibrary.org/b/id/{cover_id}-L.jpg" if cover_id else None,
-                                    'page_count': book_details.get('number_of_pages'),
-                                    'reading_time': reading_time
-                                }
+                    if new_explanation:
+                        recommendation['explanation'] = new_explanation
+                    if why_read:
+                        recommendation['why_read'] = why_read
+            except Exception as e:
+                print(f"Error enhancing recommendation: {e}")
 
-                                recommendations.append(recommendation)
-                                seen_books.add(book_id)
+        # Return final JSON response
+        return jsonify({
+            'status': 'completed',
+            'recommendations': final_recommendations
+        })
 
-                                filtered_recommendations = apply_filters(recommendations, filters)
-                                current_recommendations = sorted(
-                                    filtered_recommendations,
-                                    key=lambda x: x['similarity_score'],
-                                    reverse=True
-                                )[:2]
-
-                                data_dict = {
-                                    'status': 'processing',
-                                    'stage': 'finding_recommendations',
-                                    'processed': subject_idx + 1,
-                                    'total': len(common_subjects),
-                                    'recommendations': current_recommendations
-                                }
-                                yield f"data: {json.dumps(data_dict)}\n\n"
-
-            filtered_recommendations = apply_filters(recommendations, filters)
-            final_recommendations = sorted(
-                filtered_recommendations,
-                key=lambda x: x['similarity_score'],
-                reverse=True
-            )[:2]
-
-            print("\n=== Enhancing final recommendations with AI ===")
-            data_dict = {
-                'status': 'processing',
-                'stage': 'enhancing_recommendations',
-                'processed': 0,
-                'total': len(final_recommendations),
-                'recommendations': final_recommendations
-            }
-            yield f"data: {json.dumps(data_dict)}\n\n"
-
-            for idx, recommendation in enumerate(final_recommendations):
-                try:
-                    book_id = recommendation['id']
-                    book_details = recommender.get_book_details(book_id)
-                    if book_details:
-                        new_explanation = recommender.generate_similarity_explanation_with_ai(
-                            book_details,
-                            input_books,
-                            recommendation['similarity_score']
-                        )
-                        why_read = recommender.generate_reading_recommendation_with_ai(
-                            book_details,
-                            input_books
-                        )
-
-                        if new_explanation:
-                            recommendation['explanation'] = new_explanation
-                        if why_read:
-                            recommendation['why_read'] = why_read
-
-                    data_dict = {
-                        'status': 'processing',
-                        'stage': 'enhancing_recommendations',
-                        'processed': idx + 1,
-                        'total': len(final_recommendations),
-                        'recommendations': final_recommendations
-                    }
-                    yield f"data: {json.dumps(data_dict)}\n\n"
-
-                except Exception as e:
-                    print(f"Error enhancing recommendation: {e}")
-
-            data_dict = {
-                'status': 'completed',
-                'recommendations': final_recommendations
-            }
-            yield f"data: {json.dumps(data_dict)}\n\n"
-
-        except Exception as e:
-            print(f"Error generating recommendations: {e}")
-            yield f"data: {json.dumps({'error': str(e)})}\n\n"
-
-    return Response(
-        stream_with_context(generate()),
-        mimetype='text/event-stream',
-        headers={
-            'Cache-Control': 'no-cache',
-            'Connection': 'keep-alive',
-            'X-Accel-Buffering': 'no'
-        }
-    )
-
+    except Exception as e:
+        print(f"Error generating recommendations: {e}")
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     app.run(debug=True)

@@ -39,7 +39,7 @@ function App() {
       console.log('Sending books to backend:', books);
       const response = await fetch('https://book-recommender-api-affpgxcqgah8cvah.westus-01.azurewebsites.net/api/recommend', {
         method: 'POST',
-        mode: 'cors', // ensure cors mode
+        mode: 'cors',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -50,63 +50,23 @@ function App() {
         throw new Error('Failed to fetch recommendations');
       }
 
-      const reader = response.body?.getReader();
-      if (!reader) throw new Error('No reader available');
+      // Now we simply await the full JSON response (no streaming)
+      const data = await response.json();
 
-      const decoder = new TextDecoder();
-      let buffer = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n\n');
-        buffer = lines.pop() || '';
-
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            try {
-              const data = JSON.parse(line.slice(6));
-              
-              if (data.error) {
-                throw new Error(data.error);
-              }
-
-              // Update current stage
-              if (data.stage) {
-                setCurrentStage(data.stage);
-              }
-
-              if (data.recommendations?.length) {
-                setRecommendations(prev => {
-                  const newRecs = [...prev];
-                  data.recommendations.forEach((rec: Book, index: number) => {
-                    if (index < 2) {
-                      newRecs[index] = rec;
-                    }
-                  });
-                  return newRecs;
-                });
-              }
-
-              if (data.processed !== undefined && data.total !== undefined) {
-                setProgress({
-                  processed: data.processed,
-                  total: data.total
-                });
-              }
-
-              if (data.status === 'completed') {
-                setCurrentStage('completed');
-                setIsLoading(false);
-              }
-            } catch (e) {
-              console.error('Error parsing JSON:', e);
-            }
-          }
-        }
+      if (data.error) {
+        throw new Error(data.error);
       }
+
+      // The backend now returns the final recommendations directly
+      setCurrentStage(data.status || 'completed');
+
+      if (data.recommendations?.length) {
+        setRecommendations([
+          data.recommendations[0] || null,
+          data.recommendations[1] || null
+        ]);
+      }
+
     } catch (error) {
       console.error('Error fetching recommendations:', error);
       setError(error instanceof Error ? error.message : 'Failed to get recommendations');
