@@ -1,0 +1,25 @@
+{
+  "routes": [
+    {
+      "route": "/api/*",
+      "methods": ["GET", "POST", "OPTIONS"],
+      "allowedRoles": ["anonymous"],
+      "cors": {
+        "allowedOrigins": [
+          "https://lemon-water-065707a1e.4.azurestaticapps.net",
+          "https://book-recommender-api-affpgxcqgah8cvah.westus-01.azurewebsites.net"
+        ],
+        "allowedMethods": ["GET", "POST", "OPTIONS"],
+        "allowedHeaders": ["Content-Type", "Authorization"],
+        "exposedHeaders": ["*"],
+        "maxAge": 3600
+      }
+    }
+  ],
+  "navigationFallback": {
+    "rewrite": "/index.html"
+  },
+  "platform": {
+    "apiRuntime": "python:3.9"
+  }
+}
