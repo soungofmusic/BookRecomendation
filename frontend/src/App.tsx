@@ -19,7 +19,8 @@ interface Book {
 
 function App() {
   const [recommendations, setRecommendations] = useState<(Book | null)[]>([null, null]);
-  const [isLoading, setIsLoading] = useState<boolean | string>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [loadingMessage, setLoadingMessage] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
   
@@ -35,6 +36,7 @@ function App() {
     if (!books.length) return;
     
     setIsLoading(true);
+    setLoadingMessage("Starting search...");
     setError(null);
     setRecommendations([null, null]);
 
@@ -42,13 +44,7 @@ function App() {
       const startTime = Date.now();
       const loadingUpdateInterval = setInterval(() => {
         const elapsedTime = Math.floor((Date.now() - startTime) / 1000);
-        setIsLoading(prev => {
-          if (prev) { // Only update if still loading
-            const message = getLoadingMessage(elapsedTime);
-            return message;
-          }
-          return prev;
-        });
+        setLoadingMessage(getLoadingMessage(elapsedTime));
       }, 1000);
 
       try {
@@ -81,6 +77,7 @@ function App() {
         
         clearInterval(loadingUpdateInterval);
         setIsLoading(false);
+        setLoadingMessage("");
         setRetryCount(0);
 
       } catch (error) {
@@ -95,6 +92,7 @@ function App() {
              error.message.includes('blocked by CORS policy'))) {
           setRetryCount(attempt + 1);
           setError('Connecting to recommendation service...');
+          setLoadingMessage("Retrying connection...");
           // Exponential backoff
           await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
           return makeRequest(attempt + 1);
@@ -103,6 +101,7 @@ function App() {
         setError(error instanceof Error ? error.message : 'Failed to get recommendations');
         setRecommendations([null, null]);
         setIsLoading(false);
+        setLoadingMessage("");
       }
     };
 
@@ -110,6 +109,8 @@ function App() {
       await makeRequest();
     } catch (error) {
       console.error('Error in makeRequest:', error);
+      setIsLoading(false);
+      setLoadingMessage("");
     }
   };
 
@@ -153,6 +154,12 @@ function App() {
               onSubmit={handleBookSubmit}
               isLoading={isLoading}
             />
+
+            {isLoading && loadingMessage && (
+              <div className="mt-4 text-center text-gray-600">
+                {loadingMessage}
+              </div>
+            )}
           </div>
 
           <div className="mt-8">
