@@ -1,6 +1,6 @@
 # app.py
 from flask import Flask, request, jsonify, Response, stream_with_context
-from flask_cors import CORS
+from flask_cors import CORS, cross_origin
 import requests
 import json
 import time
@@ -15,22 +15,24 @@ from groq import Groq
 load_dotenv()
 
 app = Flask(__name__)
-cors = CORS(app, resources={
-    r"/*": {
-        "origins": ["https://lemon-water-065707a1e.4.azurestaticapps.net"],
-        "methods": ["GET", "POST", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Connection"]
-    }
-})
 
+# Configure CORS
+cors = CORS(
+    app,
+    origins=["https://lemon-water-065707a1e.4.azurestaticapps.net"],
+    methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type"]
+)
 
 OPEN_LIBRARY_SEARCH = "https://openlibrary.org/search.json"
 OPEN_LIBRARY_WORKS = "https://openlibrary.org/works/"
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 
+
 @app.route('/')
 def home():
     return "Book Recommendation API is running!"
+
 
 class RateLimiter:
     def __init__(self, requests_per_day: int, tokens_per_minute: int):
@@ -45,7 +47,7 @@ class RateLimiter:
     def can_make_request(self, estimated_tokens: int) -> bool:
         with self.lock:
             current_time = datetime.now()
-            
+
             # Reset daily counter if 24 hours have passed
             if current_time - self.last_reset > timedelta(days=1):
                 self.daily_requests = 0
@@ -57,12 +59,13 @@ class RateLimiter:
                 self.minute_reset = current_time
 
             # Check if we're within limits
-            if (self.daily_requests < self.daily_limit and 
+            if (self.daily_requests < self.daily_limit and
                 self.minute_tokens + estimated_tokens <= self.minute_limit):
                 self.daily_requests += 1
                 self.minute_tokens += estimated_tokens
                 return True
             return False
+
 
 def apply_filters(recommendations: List[Dict], filters: Dict) -> List[Dict]:
     """Apply filters to the list of book recommendations."""
@@ -100,6 +103,7 @@ def apply_filters(recommendations: List[Dict], filters: Dict) -> List[Dict]:
 
     return filtered_books
 
+
 class BookRecommender:
     def __init__(self):
         self.rate_limiter = RateLimiter(14400, 20000)  # Free tier limits
@@ -109,25 +113,18 @@ class BookRecommender:
         except Exception as e:
             print(f"Warning: Could not initialize Groq client: {e}")
             self.groq_client = None
-    
+
     def extract_year(self, date_str: str) -> Optional[int]:
         """Safely extract year from various date string formats"""
         if not date_str:
             return None
-            
         try:
-            # Try direct integer conversion first
             return int(str(date_str)[:4])
         except (ValueError, TypeError):
-            # Handle month names and other formats
-            date_str = str(date_str).strip()
-            
-            # Look for 4-digit year pattern
             import re
-            year_match = re.search(r'\d{4}', date_str)
+            year_match = re.search(r'\d{4}', str(date_str).strip())
             if year_match:
                 return int(year_match.group())
-                
             return None
 
     def get_book_details(self, book_id: str) -> Dict[str, Any]:
@@ -183,7 +180,6 @@ class BookRecommender:
             'year_match': 0.4
         }
 
-        # Subject similarity
         input_subjects = set()
         for book in input_books:
             if 'subjects' in book and isinstance(book['subjects'], list):
@@ -195,10 +191,8 @@ class BookRecommender:
 
         subject_similarity = len(input_subjects & candidate_subjects) / max(len(input_subjects | candidate_subjects), 1)
 
-        # Year proximity
         candidate_year = self.extract_year(candidate_book.get('first_publish_date', ''))
         input_years = []
-        
         for book in input_books:
             year = self.extract_year(book.get('first_publish_date', ''))
             if year:
@@ -214,14 +208,12 @@ class BookRecommender:
             weights['subject_match'] * subject_similarity +
             weights['year_match'] * year_similarity
         )
-
         return score
 
     def generate_explanation(self, book: Dict, input_books: List[Dict], similarity_score: float) -> str:
         """Generate basic explanation about similarity match"""
         explanations = []
 
-        # Shared subjects
         book_subjects = set(book.get('subjects', []) if isinstance(book.get('subjects', []), list) else [])
         input_subjects = set()
         for input_book in input_books:
@@ -233,7 +225,6 @@ class BookRecommender:
             subject_examples = list(shared_subjects)[:3]
             explanations.append(f"shares genres like {', '.join(subject_examples)}")
 
-        # Year proximity using the extract_year method
         book_year = self.extract_year(book.get('first_publish_date', ''))
         input_years = []
         for input_book in input_books:
@@ -250,8 +241,7 @@ class BookRecommender:
                 explanations.append("was published in a similar era")
 
         if explanations:
-            explanation = f"This book was recommended because it {' and '.join(explanations)}"
-            explanation += f", with a {similarity_score:.1f}% match to your preferences."
+            explanation = f"This book was recommended because it {' and '.join(explanations)}, with a {similarity_score:.1f}% match to your preferences."
         else:
             explanation = "This book matches your reading preferences."
 
@@ -260,7 +250,6 @@ class BookRecommender:
     def generate_reading_recommendation(self, book: Dict, input_books: List[Dict]) -> str:
         """Generate an objective reading experience description"""
         parts = []
-
         subjects = book.get('subjects', [])
         main_genres = subjects[:3] if subjects else []
         themes = subjects[3:6] if len(subjects) > 3 else []
@@ -302,10 +291,10 @@ class BookRecommender:
         """Make a rate-limited call to the Groq API"""
         if not self.groq_client:
             return None
-            
+
         estimated_tokens = len(prompt.split()) + max_tokens
-        
-        if not self.rate_limiter.can_make_request(estimated_tokens):
+
+        if not self.can_make_request(estimated_tokens):
             print("Rate limit reached, falling back to basic generation")
             return None
 
@@ -321,24 +310,26 @@ class BookRecommender:
                 temperature=0.7,
                 max_tokens=max_tokens
             )
-            
+
             return chat_completion.choices[0].message.content
 
         except Exception as e:
             print(f"Error calling Groq API: {e}")
             return None
 
+    def can_make_request(self, estimated_tokens: int) -> bool:
+        return self.rate_limiter.can_make_request(estimated_tokens)
+
     def generate_similarity_explanation_with_ai(self, book: Dict, input_books: List[Dict], similarity_score: float) -> str:
-        """Generate a similarity explanation using Groq API"""
         shared_subjects = set(book.get('subjects', [])) & set(sum([b.get('subjects', []) for b in input_books], []))
-        
+
         book_year = self.extract_year(book.get('first_publish_date', ''))
         input_years = []
         for input_book in input_books:
             year = self.extract_year(input_book.get('first_publish_date', ''))
             if year:
                 input_years.append(year)
-        
+
         avg_year = sum(input_years) / len(input_years) if input_years else None
 
         prompt = f"""Analyze why this book matches the reader's preferences:
@@ -362,7 +353,6 @@ Explain why this book would appeal to the reader based on these matches. Use 2nd
         return self.generate_explanation(book, input_books, similarity_score)
 
     def generate_reading_recommendation_with_ai(self, book: Dict, input_books: List[Dict]) -> str:
-        """Generate a recommendation using Groq API"""
         prompt = f"""Create a detailed and compelling recommendation for why someone should read this book:
 
 Title: {book.get('title', '')}
@@ -378,7 +368,7 @@ Create an engaging recommendation that covers:
 5. What lasting impact or insights readers can expect to gain
 
 Write in an enthusiastic, persuasive tone that makes readers excited to start the book.
-Use 2nd person like you and your. 
+Use 2nd person like you and your.
 Provide specific details and compelling reasons.
 Aim for 4-6 sentences that paint a vivid picture of the reading experience."""
 
@@ -387,9 +377,12 @@ Aim for 4-6 sentences that paint a vivid picture of the reading experience."""
             return response.strip()
         return self.generate_reading_recommendation(book, input_books)
 
+
 recommender = BookRecommender()
 
+
 @app.route('/api/recommend', methods=['POST'])
+@cross_origin(origins=["https://lemon-water-065707a1e.4.azurestaticapps.net"])
 def get_recommendations():
     def generate():
         try:
@@ -448,7 +441,6 @@ def get_recommendations():
                 'total': len(common_subjects),
                 'recommendations': []
             }
-
             yield f"data: {json.dumps(data_dict)}\n\n"
 
             for subject_idx, (subject, _) in enumerate(common_subjects):
@@ -507,7 +499,6 @@ def get_recommendations():
                                     'total': len(common_subjects),
                                     'recommendations': current_recommendations
                                 }
-
                                 yield f"data: {json.dumps(data_dict)}\n\n"
 
             filtered_recommendations = apply_filters(recommendations, filters)
@@ -525,24 +516,20 @@ def get_recommendations():
                 'total': len(final_recommendations),
                 'recommendations': final_recommendations
             }
-
             yield f"data: {json.dumps(data_dict)}\n\n"
 
-            # Now enhance the final recommendations with AI
             for idx, recommendation in enumerate(final_recommendations):
                 try:
                     book_id = recommendation['id']
                     book_details = recommender.get_book_details(book_id)
-
                     if book_details:
-                        # Use the new AI-enhanced methods
                         new_explanation = recommender.generate_similarity_explanation_with_ai(
-                            book_details, 
-                            input_books, 
+                            book_details,
+                            input_books,
                             recommendation['similarity_score']
                         )
                         why_read = recommender.generate_reading_recommendation_with_ai(
-                            book_details, 
+                            book_details,
                             input_books
                         )
 
@@ -558,18 +545,15 @@ def get_recommendations():
                         'total': len(final_recommendations),
                         'recommendations': final_recommendations
                     }
-
                     yield f"data: {json.dumps(data_dict)}\n\n"
 
                 except Exception as e:
                     print(f"Error enhancing recommendation: {e}")
-                    # Keep existing basic explanation if AI enhancement fails
 
             data_dict = {
                 'status': 'completed',
                 'recommendations': final_recommendations
             }
-
             yield f"data: {json.dumps(data_dict)}\n\n"
 
         except Exception as e:
@@ -582,10 +566,10 @@ def get_recommendations():
         headers={
             'Cache-Control': 'no-cache',
             'Connection': 'keep-alive',
-            'X-Accel-Buffering': 'no',
-            'Content-Type': 'text/event-stream'
+            'X-Accel-Buffering': 'no'
         }
     )
+
 
 if __name__ == '__main__':
     app.run(debug=True)
