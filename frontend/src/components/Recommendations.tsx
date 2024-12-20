@@ -46,7 +46,7 @@ const getReadingTime = (pageCount: number | undefined): string => {
 
 interface RecommendationsProps {
   recommendations: (Book | null)[];
-  isLoading: boolean;
+  isLoading: boolean | string;  // <-- Updated to match App.tsx
   processedCount?: number;
   totalCount?: number;
   stage?: string;
