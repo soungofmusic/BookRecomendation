@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import BookInput from './components/BookInput';
 import Recommendations from './components/Recommendations';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 interface Book {
   id: string;
@@ -18,13 +19,20 @@ interface Book {
 
 function App() {
   const [recommendations, setRecommendations] = useState<(Book | null)[]>([null, null]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState<boolean | string>(false);
   const [error, setError] = useState<string | null>(null);
-  const [progress, setProgress] = useState({
-    processed: 0,
-    total: 0
-  });
-  const [currentStage, setCurrentStage] = useState<string>('input_processing');
+  const [retryCount, setRetryCount] = useState(0);
+  const [requestTimeout, setRequestTimeout] = useState(60);
+  // No maximum retry limit
+  
+  // Loading state message based on time elapsed
+  const getLoadingMessage = (elapsedTime: number) => {
+    if (elapsedTime < 10) return "Searching for books...";
+    if (elapsedTime < 20) return "Analyzing your preferences...";
+    if (elapsedTime < 30) return "Finding the perfect matches...";
+    if (elapsedTime < 45) return "Almost there...";
+    return "This is taking longer than usual. Please wait...";
+  };
 
   const handleBookSubmit = async (books: string[]) => {
     if (!books.length) return;
@@ -32,48 +40,82 @@ function App() {
     setIsLoading(true);
     setError(null);
     setRecommendations([null, null]);
-    setProgress({ processed: 0, total: 0 });
-    setCurrentStage('input_processing');
-    
+
+    const makeRequest = async (attempt: number = 0): Promise<void> => {
+      const startTime = Date.now();
+      const loadingUpdateInterval = setInterval(() => {
+        const elapsedTime = Math.floor((Date.now() - startTime) / 1000);
+        setIsLoading(prev => {
+          if (prev) { // Only update if still loading
+            const message = getLoadingMessage(elapsedTime);
+            return message;
+          }
+          return prev;
+        });
+      }, 1000);
+      try {
+        const response = await fetch('https://book-recommender-api-affpgxcqgah8cvah.westus-01.azurewebsites.net/api/recommend', {
+          method: 'POST',
+          mode: 'cors',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ books }),
+          // Add timeout to prevent hanging requests
+          signal: AbortSignal.timeout(60000) // 60 second timeout for longer processing
+        });
+
+        if (!response.ok) {
+          throw new Error(`Server responded with status: ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        if (data.error) {
+          throw new Error(data.error);
+        }
+
+        if (data.recommendations?.length) {
+          setRecommendations([
+            data.recommendations[0] || null,
+            data.recommendations[1] || null
+          ]);
+        }
+      } catch (error) {
+        console.error('Error fetching recommendations:', error);
+        
+        // Always retry on network errors
+        if (error instanceof Error && 
+            (error.message.includes('Failed to fetch') || error.message.includes('network'))) {
+          setRetryCount(attempt + 1);
+          // Exponential backoff
+          await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+          return makeRequest(attempt + 1);
+        }
+        
+        let errorMessage = 'Unable to get recommendations. ';
+        if (error instanceof Error) {
+          if (error.message.includes('Failed to fetch')) {
+            errorMessage += 'Please check your internet connection and try again.';
+          } else if (error.name === 'AbortError') {
+            errorMessage += 'Request timed out. Please try again.';
+          } else {
+            errorMessage += error.message;
+          }
+        }
+        
+        setError(errorMessage);
+        setRecommendations([null, null]);
+      }
+    };
+
     try {
-      console.log('Sending books to backend:', books);
-      const response = await fetch('https://book-recommender-api-affpgxcqgah8cvah.westus-01.azurewebsites.net/api/recommend', {
-        method: 'POST',
-        mode: 'cors',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ books }),
-      });
-    
-      if (!response.ok) {
-        throw new Error('Failed to fetch recommendations');
+      await makeRequest();
+          } finally {
+        clearInterval(loadingUpdateInterval);
+        setIsLoading(false);
+        setRetryCount(0);
       }
-
-      // Now we simply await the full JSON response (no streaming)
-      const data = await response.json();
-
-      if (data.error) {
-        throw new Error(data.error);
-      }
-
-      // The backend now returns the final recommendations directly
-      setCurrentStage(data.status || 'completed');
-
-      if (data.recommendations?.length) {
-        setRecommendations([
-          data.recommendations[0] || null,
-          data.recommendations[1] || null
-        ]);
-      }
-
-    } catch (error) {
-      console.error('Error fetching recommendations:', error);
-      setError(error instanceof Error ? error.message : 'Failed to get recommendations');
-      setRecommendations([null, null]);
-    } finally {
-      setIsLoading(false);
-    }
   };
 
   return (
@@ -89,11 +131,13 @@ function App() {
         </div>
 
         {error && (
-          <div className="mb-8 p-4 bg-red-50 border border-red-200 rounded-lg text-red-800 animate-fadeIn">
-            <p className="text-sm">
-              {error} Please try again or check if the backend server is running.
-            </p>
-          </div>
+          <Alert variant="destructive" className="mb-8 animate-fadeIn">
+            <AlertTitle>Error</AlertTitle>
+            <AlertDescription className="mt-2">
+              {error}
+              {retryCount > 0 && <span className="block mt-1">Retry attempt {retryCount}... Will keep trying until connected.</span>}
+            </AlertDescription>
+          </Alert>
         )}
 
         <div className="max-w-4xl mx-auto">
@@ -117,9 +161,6 @@ function App() {
             <Recommendations
               recommendations={recommendations}
               isLoading={isLoading}
-              processedCount={progress.processed}
-              totalCount={progress.total}
-              stage={currentStage}
             />
           </div>
         </div>
