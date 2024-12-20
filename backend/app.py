@@ -17,12 +17,7 @@ load_dotenv()
 app = Flask(__name__)
 
 # Configure CORS
-cors = CORS(
-    app,
-    origins=["https://lemon-water-065707a1e.4.azurestaticapps.net"],
-    methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["Content-Type"]
-)
+CORS(app, origins=["https://lemon-water-065707a1e.4.azurestaticapps.net"], methods=["GET", "POST", "OPTIONS"], allow_headers=["Content-Type"])
 
 OPEN_LIBRARY_SEARCH = "https://openlibrary.org/search.json"
 OPEN_LIBRARY_WORKS = "https://openlibrary.org/works/"
