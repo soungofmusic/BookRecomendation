@@ -60,8 +60,19 @@ function App() {
           body: JSON.stringify({ books })
         });
     
+        let errorMessage = '';
+        
         if (!response.ok) {
-          throw new Error(`Server responded with status: ${response.status}`);
+          const errorText = await response.text();
+          try {
+            // Try to parse error as JSON
+            const errorJson = JSON.parse(errorText);
+            errorMessage = errorJson.error || `Server responded with status: ${response.status}`;
+          } catch (e) {
+            // If not JSON, use the raw text if available
+            errorMessage = errorText || `Server responded with status: ${response.status}`;
+          }
+          throw new Error(errorMessage);
         }
 
         const data = await response.json();
@@ -75,6 +86,9 @@ function App() {
             data.recommendations[0] || null,
             data.recommendations[1] || null
           ]);
+        } else {
+          setError("No recommendations found. Please try different books.");
+          setRecommendations([null, null]);
         }
         
         clearInterval(loadingUpdateInterval);
@@ -86,14 +100,15 @@ function App() {
         console.error('Error fetching recommendations:', error);
         clearInterval(loadingUpdateInterval);
         
+        // Only retry on network errors, not on server errors (500)
         if (error instanceof Error && 
             (error.message.includes('Failed to fetch') || 
              error.message.includes('network')) &&
-            attempt < 3) {  // Limit to 3 retry attempts
+            !error.message.includes('500') &&
+            attempt < 3) {
           setRetryCount(attempt + 1);
           setError('Connecting to recommendation service...');
           setLoadingMessage("Retrying connection...");
-          // Exponential backoff
           await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
           return makeRequest(attempt + 1);
         }
