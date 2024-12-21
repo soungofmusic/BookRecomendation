@@ -15,7 +15,11 @@ from flask_cors import CORS
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app, resources={r"/api/*": {"origins": "https://lemon-water-065707a1e.4.azurestaticapps.net"}}, supports_credentials=True)
+CORS(app, resources={
+    r"/api/*": {
+        "origins": "https://lemon-water-065707a1e.4.azurestaticapps.net"
+    }
+}, supports_credentials=True)
 
 if not os.environ.get("GROQ_API_KEY"):
     print("Warning: GROQ_API_KEY not found in environment variables")
@@ -32,9 +36,10 @@ def home():
 def test_endpoint():
     return jsonify({"message": "hello"})
 
-@app.after_request
-def after_request(response):
-    return response
+# Remove or comment out this after_request if relying solely on Flask-CORS
+# @app.after_request
+# def after_request(response):
+#     return response
 
 class RateLimiter:
     def __init__(self, requests_per_day: int, tokens_per_minute: int):
@@ -57,7 +62,7 @@ class RateLimiter:
                 self.minute_reset = current_time
 
             if (self.daily_requests < self.daily_limit and
-                self.minute_tokens + estimated_tokens <= self.minute_limit):
+                    self.minute_tokens + estimated_tokens <= self.minute_limit):
                 self.daily_requests += 1
                 self.minute_tokens += estimated_tokens
                 return True
@@ -169,9 +174,9 @@ class BookRecommender:
         }
 
         input_subjects = set()
-        for book in input_books:
-            if 'subjects' in book and isinstance(book['subjects'], list):
-                input_subjects.update(book['subjects'])
+        for b in input_books:
+            if 'subjects' in b and isinstance(b['subjects'], list):
+                input_subjects.update(b['subjects'])
 
         candidate_subjects = set()
         if 'subjects' in candidate_book and isinstance(candidate_book['subjects'], list):
@@ -181,8 +186,8 @@ class BookRecommender:
 
         candidate_year = self.extract_year(candidate_book.get('first_publish_date', ''))
         input_years = []
-        for book in input_books:
-            year = self.extract_year(book.get('first_publish_date', ''))
+        for ib in input_books:
+            year = self.extract_year(ib.get('first_publish_date', ''))
             if year:
                 input_years.append(year)
 
@@ -307,62 +312,63 @@ class BookRecommender:
 
     def can_make_request(self, estimated_tokens: int) -> bool:
         return self.rate_limiter.can_make_request(estimated_tokens)
-     def generate_similarity_explanation_with_ai(self, book: Dict, input_books: List[Dict], similarity_score: float) -> str:
-    shared_subjects = set(book.get('subjects', [])) & set(sum([b.get('subjects', []) for b in input_books], []))
 
-    book_year = self.extract_year(book.get('first_publish_date', ''))
-    input_years = []
-    for input_book in input_books:
-        year = self.extract_year(input_book.get('first_publish_date', ''))
-        if year:
-            input_years.append(year)
+    def generate_similarity_explanation_with_ai(self, book: Dict, input_books: List[Dict], similarity_score: float) -> str:
+        shared_subjects = set(book.get('subjects', [])) & set(sum([b.get('subjects', []) for b in input_books], []))
 
-    avg_year = sum(input_years) / len(input_years) if input_years else None
+        book_year = self.extract_year(book.get('first_publish_date', ''))
+        input_years = []
+        for input_book in input_books:
+            year = self.extract_year(input_book.get('first_publish_date', ''))
+            if year:
+                input_years.append(year)
 
-    prompt = f"""Analyze why this book matches the reader's preferences:
+        avg_year = sum(input_years) / len(input_years) if input_years else None
 
-Book Details:
-Title: {book.get('title', '')}
-Author: {book.get('author_name', ['Unknown'])[0] if book.get('author_name') else 'Unknown'}
-Year: {book_year if book_year else 'Unknown'}
-Shared Genres: {', '.join(list(shared_subjects)[:3])}
-Similarity Score: {similarity_score:.1f}%
+        prompt = f"""Analyze why this book matches the reader's preferences:
 
-Reader's Preferences:
-- Favorite Genres: {', '.join(list(set(sum([b.get('subjects', [])[:3] for b in input_books], []))))}
-- Preferred Era: Around {int(avg_year) if avg_year else 'Unknown'}
+        Book Details:
+        Title: {book.get('title', '')}
+        Author: {book.get('author_name', ['Unknown'])[0] if book.get('author_name') else 'Unknown'}
+        Year: {book_year if book_year else 'Unknown'}
+        Shared Genres: {', '.join(list(shared_subjects)[:3])}
+        Similarity Score: {similarity_score:.1f}%
 
-Explain why this book would appeal to the reader based on these matches. Use 2nd person like you and your. Focus on specific connections and shared elements. Keep it concise (4-5 sentences) and analytical."""
+        Reader's Preferences:
+        - Favorite Genres: {', '.join(list(set(sum([b.get('subjects', [])[:3] for b in input_books], []))))}
+        - Preferred Era: Around {int(avg_year) if avg_year else 'Unknown'}
 
-    response = self.call_groq_api(prompt, max_tokens=256)
-    if response:
-        return response.strip()
-    return self.generate_explanation(book, input_books, similarity_score)
+        Explain why this book would appeal to the reader based on these matches. Use 2nd person like you and your. Focus on specific connections and shared elements. Keep it concise (4-5 sentences) and analytical."""
 
-def generate_reading_recommendation_with_ai(self, book: Dict, input_books: List[Dict]) -> str:
-    prompt = f"""Create a detailed and compelling recommendation for why someone should read this book:
+        response = self.call_groq_api(prompt, max_tokens=256)
+        if response:
+            return response.strip()
+        return self.generate_explanation(book, input_books, similarity_score)
 
-Title: {book.get('title', '')}
-Author: {book.get('author_name', ['Unknown'])[0] if book.get('author_name') else 'Unknown'}
-Year: {book.get('first_publish_date', 'Unknown')}
-Genres: {', '.join(book.get('subjects', [])[:5]) if book.get('subjects') else 'Unknown'}
+    def generate_reading_recommendation_with_ai(self, book: Dict, input_books: List[Dict]) -> str:
+        prompt = f"""Create a detailed and compelling recommendation for why someone should read this book:
 
-Create an engaging recommendation that covers:
-1. The unique aspects and standout features of this book
-2. The emotional journey and reading experience it offers
-3. The book's cultural or literary significance
-4. Who would particularly enjoy or benefit from reading it
-5. What lasting impact or insights readers can expect to gain
+        Title: {book.get('title', '')}
+        Author: {book.get('author_name', ['Unknown'])[0] if book.get('author_name') else 'Unknown'}
+        Year: {book.get('first_publish_date', 'Unknown')}
+        Genres: {', '.join(book.get('subjects', [])[:5]) if book.get('subjects') else 'Unknown'}
 
-Write in an enthusiastic, persuasive tone that makes readers excited to start the book.
-Use 2nd person like you and your.
-Provide specific details and compelling reasons.
-Aim for 4-6 sentences that paint a vivid picture of the reading experience."""
+        Create an engaging recommendation that covers:
+        1. The unique aspects and standout features of this book
+        2. The emotional journey and reading experience it offers
+        3. The book's cultural or literary significance
+        4. Who would particularly enjoy or benefit from reading it
+        5. What lasting impact or insights readers can expect to gain
 
-    response = self.call_groq_api(prompt)
-    if response:
-        return response.strip()
-    return self.generate_reading_recommendation(book, input_books)
+        Write in an enthusiastic, persuasive tone that makes readers excited to start the book.
+        Use 2nd person like you and your.
+        Provide specific details and compelling reasons.
+        Aim for 4-6 sentences that paint a vivid picture of the reading experience."""
+
+        response = self.call_groq_api(prompt)
+        if response:
+            return response.strip()
+        return self.generate_reading_recommendation(book, input_books)
 
 recommender = BookRecommender()
 
@@ -390,7 +396,7 @@ def get_recommendations():
                     OPEN_LIBRARY_SEARCH,
                     params={'q': title, 'fields': 'key,title,author_name,first_publish_year,subject,cover_i', 'limit': 1}
                 )
-                
+
                 if not response.ok:
                     print(f"OpenLibrary API error for {title}: {response.status_code}")
                     print(f"Response content: {response.text}")
@@ -435,9 +441,9 @@ def get_recommendations():
                 )
 
                 if response.ok:
-                    for book in response.json().get('docs', []):
-                        book_id = book.get('key', '').split('/')[-1]
-                        author = book.get('author_name', ['Unknown'])[0] if book.get('author_name') else 'Unknown'
+                    for b in response.json().get('docs', []):
+                        book_id = b.get('key', '').split('/')[-1]
+                        author = b.get('author_name', ['Unknown'])[0] if b.get('author_name') else 'Unknown'
 
                         if book_id not in input_book_ids and book_id not in seen_books and author not in input_authors:
                             book_details = recommender.get_book_details(book_id)
@@ -446,15 +452,15 @@ def get_recommendations():
                                 explanation = recommender.generate_explanation(book_details, input_books, similarity_score * 100)
                                 basic_reading_rec = recommender.generate_reading_recommendation(book_details, input_books)
 
-                                cover_id = book.get('cover_i')
+                                cover_id = b.get('cover_i')
                                 reading_time = recommender.calculate_reading_time(book_details.get('number_of_pages'))
 
                                 recommendation = {
                                     'id': book_id,
-                                    'title': book.get('title', ''),
+                                    'title': b.get('title', ''),
                                     'author': author,
-                                    'year': book.get('first_publish_year'),
-                                    'genres': book.get('subject', [])[:5] if book.get('subject') else [],
+                                    'year': b.get('first_publish_year'),
+                                    'genres': b.get('subject', [])[:5] if b.get('subject') else [],
                                     'similarity_score': round(similarity_score * 100, 1),
                                     'explanation': explanation,
                                     'why_read': basic_reading_rec,
@@ -507,6 +513,5 @@ def get_recommendations():
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 9000))
+    port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
-                                                                                          
