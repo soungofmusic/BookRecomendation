@@ -15,11 +15,7 @@ from flask_cors import CORS
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app, resources={
-    r"/api/*": {
-        "origins": "https://lemon-water-065707a1e.4.azurestaticapps.net"
-    }
-}, supports_credentials=True)
+CORS(app, resources={r"/api/*": {"origins": "https://lemon-water-065707a1e.4.azurestaticapps.net"}}, supports_credentials=True)
 
 if not os.environ.get("GROQ_API_KEY"):
     print("Warning: GROQ_API_KEY not found in environment variables")
@@ -38,10 +34,6 @@ def test_endpoint():
 
 @app.after_request
 def after_request(response):
-    response.headers.add('Access-Control-Allow-Origin', 'https://lemon-water-065707a1e.4.azurestaticapps.net')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
-    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
-    response.headers.add('Access-Control-Allow-Credentials', 'true')
     return response
 
 class RateLimiter:
