@@ -147,11 +147,11 @@ function App() {
         <div className="flex items-center justify-center gap-4 mb-6">
           <img 
             src="/favicon.ico" 
-            alt="Book Next" 
+            alt="Read Next" 
             className="w-16 h-16 md:w-20 md:h-20" // Increased size and made it responsive
           />
           <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 text-transparent bg-clip-text">
-            Book Next
+            Read Next
           </h1>
         </div>
         <p className="text-gray-600 max-w-2xl mx-auto">
