@@ -15,7 +15,11 @@ from flask_cors import CORS
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app, resources={r"/api/*": {"origins": "https://lemon-water-065707a1e.4.azurestaticapps.net"}})
+CORS(app, resources={
+    r"/api/*": {
+        "origins": "https://lemon-water-065707a1e.4.azurestaticapps.net"
+    }
+}, supports_credentials=True)
 
 if not os.environ.get("GROQ_API_KEY"):
     print("Warning: GROQ_API_KEY not found in environment variables")
