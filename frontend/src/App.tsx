@@ -48,17 +48,15 @@ function App() {
       }, 1000);
 
       try {
-        console.log('Sending books to backend:', books);
         const response = await fetch('https://book-recommender-api-affpgxcqgah8cvah.westus-01.azurewebsites.net/api/recommend', {
           method: 'POST',
           mode: 'cors',
-          credentials: 'include',
+          credentials: 'omit',
           headers: {
             'Content-Type': 'application/json',
             'Accept': 'application/json'
           },
           body: JSON.stringify({ books })
-        });
     
         if (!response.ok) {
           throw new Error(`Server responded with status: ${response.status}`);
@@ -88,17 +86,15 @@ function App() {
         
         // Always retry on network errors or CORS issues
         if (error instanceof Error && 
-            (error.message.includes('Failed to fetch') || 
-             error.message.includes('network') ||
-             error.message.includes('CORS') ||
-             error.message.includes('blocked by CORS policy'))) {
-          setRetryCount(attempt + 1);
-          setError('Connecting to recommendation service...');
-          setLoadingMessage("Retrying connection...");
-          // Exponential backoff
-          await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
-          return makeRequest(attempt + 1);
-        }
+          (error.message.includes('Failed to fetch') || 
+           error.message.includes('network')) &&
+          attempt < 3) {  // Limit to 3 retry attempts
+        setRetryCount(attempt + 1);
+        setError('Connecting to recommendation service...');
+        setLoadingMessage("Retrying connection...");
+        // Exponential backoff
+        await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+        return makeRequest(attempt + 1);
         
         setError(error instanceof Error ? error.message : 'Failed to get recommendations');
         setRecommendations([null, null]);
