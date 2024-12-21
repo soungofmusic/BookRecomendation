@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import BookInput from './components/BookInput';
 import Recommendations from './components/Recommendations';
 import { Alert, AlertDescription } from './components/Alert';
+import confetti from 'canvas-confetti';
 
 interface Book {
   id: string;
@@ -16,6 +17,15 @@ interface Book {
   ai_recommendation?: string;
   why_read?: string;
 }
+
+const triggerConfetti = () => {
+  confetti({
+    particleCount: 100,
+    spread: 70,
+    origin: { y: 0.6 },
+    colors: ['#3B82F6', '#6366F1', '#A855F7'], // blue and indigo to match your theme
+  });
+};
 
 function App() {
   const [recommendations, setRecommendations] = useState<(Book | null)[]>([null, null]);
@@ -87,6 +97,7 @@ function App() {
             data.recommendations[0] || null,
             data.recommendations[1] || null
           ]);
+          triggerConfetti(); 
         } else {
           setError("We couldn't find matching recommendations. Please try different books.");
           setRecommendations([null, null]);
