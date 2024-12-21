@@ -48,6 +48,7 @@ function App() {
       }, 1000);
 
       try {
+        console.log('Sending books to backend:', books);
         const response = await fetch('https://book-recommender-api-affpgxcqgah8cvah.westus-01.azurewebsites.net/api/recommend', {
           method: 'POST',
           mode: 'cors',
@@ -57,6 +58,7 @@ function App() {
             'Accept': 'application/json'
           },
           body: JSON.stringify({ books })
+        });
     
         if (!response.ok) {
           throw new Error(`Server responded with status: ${response.status}`);
@@ -84,17 +86,17 @@ function App() {
         console.error('Error fetching recommendations:', error);
         clearInterval(loadingUpdateInterval);
         
-        // Always retry on network errors or CORS issues
         if (error instanceof Error && 
-          (error.message.includes('Failed to fetch') || 
-           error.message.includes('network')) &&
-          attempt < 3) {  // Limit to 3 retry attempts
-        setRetryCount(attempt + 1);
-        setError('Connecting to recommendation service...');
-        setLoadingMessage("Retrying connection...");
-        // Exponential backoff
-        await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
-        return makeRequest(attempt + 1);
+            (error.message.includes('Failed to fetch') || 
+             error.message.includes('network')) &&
+            attempt < 3) {  // Limit to 3 retry attempts
+          setRetryCount(attempt + 1);
+          setError('Connecting to recommendation service...');
+          setLoadingMessage("Retrying connection...");
+          // Exponential backoff
+          await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+          return makeRequest(attempt + 1);
+        }
         
         setError(error instanceof Error ? error.message : 'Failed to get recommendations');
         setRecommendations([null, null]);
@@ -130,7 +132,7 @@ function App() {
               {error}
               {retryCount > 0 && (
                 <div className="mt-1">
-                  Retry attempt {retryCount}... Will keep trying until connected.
+                  Retry attempt {retryCount} of 3...
                 </div>
               )}
             </AlertDescription>
