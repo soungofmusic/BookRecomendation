@@ -134,10 +134,13 @@ export const BookInput: React.FC<{
     newInputs[index] = book.title;
     setBookInputs(newInputs);
     setSuggestions({ loading: false, data: [], error: null });
-
+  
+    // Move to next empty input or stay on current if it's the last one
     if (index < 4) {
+      const nextEmptyIndex = bookInputs.findIndex((input, i) => i > index && !input.trim());
+      const nextIndex = nextEmptyIndex > -1 ? nextEmptyIndex : index + 1;
       setTimeout(() => {
-        inputRefs.current[index + 1]?.focus();
+        inputRefs.current[nextIndex]?.focus();
       }, 100);
     }
   };
@@ -150,7 +153,7 @@ export const BookInput: React.FC<{
       <form onSubmit={(e) => { 
         e.preventDefault();
         const validBooks = bookInputs.filter(book => book.trim());
-        if (validBooks.length > 0) {
+        if (validBooks.length === 5) {
           onSubmit(validBooks);
         }
       }}>
@@ -164,12 +167,14 @@ export const BookInput: React.FC<{
                   value={input}
                   onChange={(e) => handleInputChange(index, e.target.value)}
                   onFocus={() => setActiveIndex(index)}
-                  placeholder={`Enter book ${index + 1}`}
+                  placeholder={`Enter book ${index + 1} (required)`}
+                  required
                   className={`
                     w-full p-4 rounded-lg
                     bg-white/70 backdrop-blur-sm
                     border-2 transition-all duration-300
                     ${activeIndex === index ? 'border-blue-500 ring-4 ring-blue-200' : 'border-gray-200'}
+                    ${!input.trim() && 'border-red-100 focus:border-blue-500'}
                     focus:border-blue-500 focus:ring-4 focus:ring-blue-200
                     hover:shadow-lg
                   `}
@@ -237,10 +242,12 @@ export const BookInput: React.FC<{
 
         <GlowingButton
           type="submit"
-          disabled={isLoading || !bookInputs.some(book => book.trim())}
+          disabled={isLoading || bookInputs.filter(book => book.trim()).length !== 5}
           loading={isLoading}
         >
-          Get Recommendations
+          {bookInputs.filter(book => book.trim()).length === 5 
+            ? "Get Recommendations" 
+            : `Enter ${5 - bookInputs.filter(book => book.trim()).length} More ${5 - bookInputs.filter(book => book.trim()).length === 1 ? 'Book' : 'Books'}`}
         </GlowingButton>
       </form>
     </div>
