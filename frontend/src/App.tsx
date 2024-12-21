@@ -25,18 +25,21 @@ function App() {
   const [retryCount, setRetryCount] = useState(0);
   
   const getLoadingMessage = (elapsedTime: number) => {
-    if (elapsedTime < 10) return "Searching for books...";
-    if (elapsedTime < 20) return "Analyzing your preferences...";
-    if (elapsedTime < 30) return "Finding the perfect matches...";
+    if (elapsedTime < 10) return "Analyzing your book choices...";
+    if (elapsedTime < 20) return "Discovering matching themes and styles...";
+    if (elapsedTime < 30) return "Finding your perfect next reads...";
     if (elapsedTime < 45) return "Almost there...";
     return "This is taking longer than usual. Please wait...";
   };
 
   const handleBookSubmit = async (books: string[]) => {
-    if (!books.length) return;
+    if (books.length !== 5) {
+      setError("Please enter exactly 5 books for the best recommendations.");
+      return;
+    }
     
     setIsLoading(true);
-    setLoadingMessage("Starting search...");
+    setLoadingMessage("Starting your book journey...");
     setError(null);
     setRecommendations([null, null]);
 
@@ -48,7 +51,7 @@ function App() {
       }, 1000);
 
       try {
-        console.log('Sending books to backend:', books);
+        console.log('Processing your book selection:', books);
         const response = await fetch('https://book-recommender-api-affpgxcqgah8cvah.westus-01.azurewebsites.net/api/recommend', {
           method: 'POST',
           mode: 'cors',
@@ -65,12 +68,10 @@ function App() {
         if (!response.ok) {
           const errorText = await response.text();
           try {
-            // Try to parse error as JSON
             const errorJson = JSON.parse(errorText);
-            errorMessage = errorJson.error || `Server responded with status: ${response.status}`;
+            errorMessage = errorJson.error || `Unable to process request: ${response.status}`;
           } catch (e) {
-            // If not JSON, use the raw text if available
-            errorMessage = errorText || `Server responded with status: ${response.status}`;
+            errorMessage = errorText || `Unable to process request: ${response.status}`;
           }
           throw new Error(errorMessage);
         }
@@ -87,7 +88,7 @@ function App() {
             data.recommendations[1] || null
           ]);
         } else {
-          setError("No recommendations found. Please try different books.");
+          setError("We couldn't find matching recommendations. Please try different books.");
           setRecommendations([null, null]);
         }
         
@@ -97,23 +98,22 @@ function App() {
         setRetryCount(0);
 
       } catch (error) {
-        console.error('Error fetching recommendations:', error);
+        console.error('Error processing recommendations:', error);
         clearInterval(loadingUpdateInterval);
         
-        // Only retry on network errors, not on server errors (500)
         if (error instanceof Error && 
             (error.message.includes('Failed to fetch') || 
              error.message.includes('network')) &&
             !error.message.includes('500') &&
             attempt < 3) {
           setRetryCount(attempt + 1);
-          setError('Connecting to recommendation service...');
+          setError('Reconnecting to recommendation service...');
           setLoadingMessage("Retrying connection...");
           await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
           return makeRequest(attempt + 1);
         }
         
-        setError(error instanceof Error ? error.message : 'Failed to get recommendations');
+        setError(error instanceof Error ? error.message : 'Unable to get recommendations at this time');
         setRecommendations([null, null]);
         setIsLoading(false);
         setLoadingMessage("");
@@ -123,7 +123,7 @@ function App() {
     try {
       await makeRequest();
     } catch (error) {
-      console.error('Error in makeRequest:', error);
+      console.error('Error in request:', error);
       setIsLoading(false);
       setLoadingMessage("");
     }
@@ -133,11 +133,14 @@ function App() {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50">
       <div className="container mx-auto py-12 px-4">
         <div className="text-center mb-12">
-          <h1 className="text-4xl font-bold mb-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-transparent bg-clip-text">
-            Book Recommendations
-          </h1>
+          <div className="flex items-center justify-center gap-3 mb-4">
+            <img src="/favicon.ico" alt="Book Next" className="w-10 h-10" />
+            <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 text-transparent bg-clip-text">
+              Book Next
+            </h1>
+          </div>
           <p className="text-gray-600 max-w-2xl mx-auto">
-            Enter your favorite books and discover new reads tailored to your taste
+            Share 5 books you love, and we'll find your perfect next reads
           </p>
         </div>
 
@@ -158,10 +161,10 @@ function App() {
           <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-xl p-6 mb-8">
             <div className="mb-6">
               <h2 className="text-xl font-semibold text-gray-800 mb-2">
-                What books do you love?
+                Your Favorite Books
               </h2>
               <p className="text-gray-600 text-sm">
-                Enter up to 5 books to get personalized recommendations
+                Enter 5 books you've enjoyed to get personalized recommendations
               </p>
             </div>
             
