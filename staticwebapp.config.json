@@ -1,0 +1,9 @@
+{
+  "routes": [
+    {
+      "route": "/api/*",
+      "allowedOrigins": ["https://lemon-water-065707a1e.4.azurestaticapps.net"],
+      "backendUri": "https://book-recommender-api-affpgxcqgah8cvah.westus-01.azurewebsites.net"
+    }
+  ]
+}
