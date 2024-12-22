@@ -3,6 +3,7 @@ import BookInput from './components/BookInput';
 import Recommendations from './components/Recommendations';
 import { Alert, AlertDescription } from './components/Alert';
 import confetti from 'canvas-confetti';
+import AnimatedBook from './components/AnimatedBook';
 
 interface Book {
   id: string;
@@ -25,6 +26,16 @@ const triggerConfetti = () => {
     origin: { y: 0.6 },
     colors: ['#3B82F6', '#6366F1', '#A855F7'], // blue and indigo to match your theme
   });
+
+  // Add a second burst of confetti for more effect
+  setTimeout(() => {
+    confetti({
+      particleCount: 50,
+      spread: 50,
+      origin: { y: 0.65 },
+      colors: ['#3B82F6', '#6366F1', '#A855F7'],
+    });
+  }, 200);
 };
 
 function App() {
@@ -35,11 +46,11 @@ function App() {
   const [retryCount, setRetryCount] = useState(0);
   
   const getLoadingMessage = (elapsedTime: number) => {
-    if (elapsedTime < 10) return "Analyzing your book choices...";
-    if (elapsedTime < 20) return "Discovering matching themes and styles...";
-    if (elapsedTime < 30) return "Finding your perfect next reads...";
-    if (elapsedTime < 45) return "Almost there...";
-    return "This is taking longer than usual. Please wait...";
+    if (elapsedTime < 10) return "Opening your book collection...";
+    if (elapsedTime < 20) return "Reading through countless stories...";
+    if (elapsedTime < 30) return "Matching literary patterns...";
+    if (elapsedTime < 45) return "Writing your next chapter...";
+    return "Carefully curating your recommendations...";
   };
 
   const handleBookSubmit = async (books: string[]) => {
@@ -49,7 +60,7 @@ function App() {
     }
     
     setIsLoading(true);
-    setLoadingMessage("Starting your book journey...");
+    setLoadingMessage("Starting your literary journey...");
     setError(null);
     setRecommendations([null, null]);
 
@@ -93,19 +104,24 @@ function App() {
         }
 
         if (data.recommendations?.length) {
-          setRecommendations([
-            data.recommendations[0] || null,
-            data.recommendations[1] || null
-          ]);
-          triggerConfetti(); 
+          // Delay setting recommendations slightly to allow for smooth transition
+          setTimeout(() => {
+            setRecommendations([
+              data.recommendations[0] || null,
+              data.recommendations[1] || null
+            ]);
+            triggerConfetti();
+          }, 500);
         } else {
           setError("We couldn't find matching recommendations. Please try different books.");
           setRecommendations([null, null]);
         }
         
         clearInterval(loadingUpdateInterval);
-        setIsLoading(false);
-        setLoadingMessage("");
+        setTimeout(() => {
+          setIsLoading(false);
+          setLoadingMessage("");
+        }, 500);
         setRetryCount(0);
 
       } catch (error) {
@@ -118,13 +134,13 @@ function App() {
             !error.message.includes('500') &&
             attempt < 3) {
           setRetryCount(attempt + 1);
-          setError('Reconnecting to recommendation service...');
+          setError('Reconnecting to our library...');
           setLoadingMessage("Retrying connection...");
           await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
           return makeRequest(attempt + 1);
         }
         
-        setError(error instanceof Error ? error.message : 'Unable to get recommendations at this time');
+        setError(error instanceof Error ? error.message : 'Unable to reach our library at the moment');
         setRecommendations([null, null]);
         setIsLoading(false);
         setLoadingMessage("");
@@ -143,21 +159,21 @@ function App() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50">
       <div className="container mx-auto py-12 px-4">
-      <div className="text-center mb-12">
-        <div className="flex items-center justify-center gap-4 mb-6">
-          <img 
-            src="/favicon.ico" 
-            alt="Read Next" 
-            className="w-16 h-16 md:w-20 md:h-20" // Increased size and made it responsive
-          />
-          <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 text-transparent bg-clip-text">
-            Read Next
-          </h1>
+        <div className="text-center mb-12">
+          <div className="flex items-center justify-center gap-4 mb-6">
+            <img 
+              src="/favicon.ico" 
+              alt="Read Next" 
+              className="w-16 h-16 md:w-20 md:h-20 transition-transform duration-300 hover:scale-105" 
+            />
+            <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 text-transparent bg-clip-text">
+              Read Next
+            </h1>
+          </div>
+          <p className="text-gray-600 max-w-2xl mx-auto">
+            Share 5 books you love, and we'll find your perfect next reads
+          </p>
         </div>
-        <p className="text-gray-600 max-w-2xl mx-auto">
-          Share 5 books you love, and we'll find your perfect next reads
-        </p>
-      </div>
 
         {error && (
           <Alert variant="destructive" className="mb-8 animate-fadeIn">
@@ -173,7 +189,7 @@ function App() {
         )}
 
         <div className="max-w-4xl mx-auto">
-          <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-xl p-6 mb-8">
+          <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-xl p-6 mb-8 transition-all duration-300 hover:shadow-2xl">
             <div className="mb-6">
               <h2 className="text-xl font-semibold text-gray-800 mb-2">
                 Your Favorite Books
@@ -189,8 +205,15 @@ function App() {
             />
 
             {isLoading && loadingMessage && (
-              <div className="mt-4 text-center text-gray-600">
-                {loadingMessage}
+              <div className="mt-8 space-y-4 transition-all duration-500 transform">
+                <div className="animate-pulse">
+                  <AnimatedBook />
+                </div>
+                <div className="text-center text-gray-600 transition-opacity">
+                  <span className="animate-fadeIn">
+                    {loadingMessage}
+                  </span>
+                </div>
               </div>
             )}
           </div>

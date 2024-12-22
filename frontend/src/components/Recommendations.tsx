@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import AnimatedBook from './AnimatedBook';
 
 interface Book {
   id: string;
@@ -46,77 +45,18 @@ const getReadingTime = (pageCount: number | undefined): string => {
 
 interface RecommendationsProps {
   recommendations: (Book | null)[];
-  isLoading: boolean | string;  // <-- Updated to match App.tsx
-  processedCount?: number;
-  totalCount?: number;
-  stage?: string;
+  isLoading: boolean;
 }
 
 const Recommendations: React.FC<RecommendationsProps> = ({
   recommendations,
-  isLoading,
-  processedCount = 0,
-  totalCount = 0,
-  stage = 'input_processing'
+  isLoading
 }) => {
   const [displayedBooks, setDisplayedBooks] = useState<(Book | null)[]>([null, null]);
 
   useEffect(() => {
     setDisplayedBooks(recommendations);
   }, [recommendations]);
-
-  const renderProgressSteps = () => {
-    const steps = [
-      { id: 'input_processing', label: 'Processing Books' },
-      { id: 'finding_recommendations', label: 'Finding Matches' },
-      { id: 'enhancing_recommendations', label: 'Enhancing Results' }
-    ];
-
-    return (
-      <div className="max-w-2xl mx-auto mb-8">
-        <div className="flex justify-between items-center">
-          {steps.map((step, index) => (
-            <React.Fragment key={step.id}>
-              <div className="flex flex-col items-center relative">
-                <div
-                  className={`w-8 h-8 rounded-full flex items-center justify-center
-                    ${stage === step.id ? 'bg-blue-600 text-white' : 
-                      stage === 'completed' || 
-                      steps.findIndex(s => s.id === stage) > index
-                        ? 'bg-green-500 text-white'
-                        : 'bg-gray-200 text-gray-500'}`}
-                >
-                  {stage === 'completed' || 
-                   steps.findIndex(s => s.id === stage) > index ? (
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                  ) : (
-                    index + 1
-                  )}
-                </div>
-                <span className="absolute -bottom-6 text-xs text-gray-500 w-24 text-center">
-                  {step.label}
-                </span>
-              </div>
-              {index < steps.length - 1 && (
-                <div className="flex-1 h-0.5 mx-2">
-                  <div
-                    className={`h-full ${
-                      stage === 'completed' ||
-                      steps.findIndex(s => s.id === stage) > index
-                        ? 'bg-green-500'
-                        : 'bg-gray-200'
-                    }`}
-                  />
-                </div>
-              )}
-            </React.Fragment>
-          ))}
-        </div>
-      </div>
-    );
-  };
 
   const renderBook = (book: Book) => (
     <div className="bg-white rounded-lg shadow hover:shadow-xl transition-all duration-300">
@@ -232,33 +172,22 @@ const Recommendations: React.FC<RecommendationsProps> = ({
     </div>
   );
 
+  if (isLoading) {
+    return null; // Loading state handled in App.tsx
+  }
+
   return (
     <div className="mt-8">
       <h2 className="text-2xl font-bold mb-6 text-center bg-gradient-to-r from-blue-600 to-indigo-600 text-transparent bg-clip-text">
-        {isLoading ? 'Finding Your Next Books' : 'Recommended Books'}
+        Recommended Books
       </h2>
-
-      {isLoading ? (
-        <div className="text-center py-8">
-          {renderProgressSteps()}
-          <AnimatedBook />
-          <div className="mt-4">
-            <p className="text-gray-600">
-              {processedCount > 0
-                ? `Processing ${processedCount} of ${totalCount} books...`
-                : 'Processing your book preferences...'}
-            </p>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {displayedBooks.map((book, index) => (
+          <div key={index} className="animate-fadeIn">
+            {book && renderBook(book)}
           </div>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {displayedBooks.map((book, index) => (
-            <div key={index}>
-              {book && renderBook(book)}
-            </div>
-          ))}
-        </div>
-      )}
+        ))}
+      </div>
     </div>
   );
 };
