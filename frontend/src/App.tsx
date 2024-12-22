@@ -46,10 +46,10 @@ function App() {
   const [retryCount, setRetryCount] = useState(0);
   
   const getLoadingMessage = (elapsedTime: number) => {
-    if (elapsedTime < 10) return "Opening your book collection...";
-    if (elapsedTime < 20) return "Reading through countless stories...";
-    if (elapsedTime < 30) return "Matching literary patterns...";
-    if (elapsedTime < 45) return "Writing your next chapter...";
+    if (elapsedTime < 20) return "Opening your book collection...";
+    if (elapsedTime < 40) return "Reading through countless stories...";
+    if (elapsedTime < 60) return "Matching literary patterns...";
+    if (elapsedTime < 90) return "Writing your next chapter...";
     return "Carefully curating your recommendations...";
   };
 
@@ -73,6 +73,11 @@ function App() {
 
       try {
         console.log('Processing your book selection:', books);
+        
+        // Add signal to allow timeout/cancellation
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 360000); // 360 second timeout
+
         const response = await fetch('https://book-recommender-api-affpgxcqgah8cvah.westus-01.azurewebsites.net/api/recommend', {
           method: 'POST',
           mode: 'cors',
@@ -81,9 +86,12 @@ function App() {
             'Content-Type': 'application/json',
             'Accept': 'application/json'
           },
-          body: JSON.stringify({ books })
+          body: JSON.stringify({ books }),
+          signal: controller.signal
         });
     
+        clearTimeout(timeoutId);
+
         let errorMessage = '';
         
         if (!response.ok) {
@@ -111,7 +119,7 @@ function App() {
               data.recommendations[1] || null
             ]);
             triggerConfetti();
-          }, 500);
+          }, 1000);
         } else {
           setError("We couldn't find matching recommendations. Please try different books.");
           setRecommendations([null, null]);
@@ -121,7 +129,7 @@ function App() {
         setTimeout(() => {
           setIsLoading(false);
           setLoadingMessage("");
-        }, 500);
+        }, 1000);
         setRetryCount(0);
 
       } catch (error) {
@@ -205,12 +213,12 @@ function App() {
             />
 
             {isLoading && loadingMessage && (
-              <div className="mt-8 space-y-4 transition-all duration-500 transform">
-                <div className="animate-pulse">
+              <div className="mt-8 space-y-4 transition-all duration-500 transform animate-fadeInScale">
+                <div className="animate-bookBounce">
                   <AnimatedBook />
                 </div>
                 <div className="text-center text-gray-600 transition-opacity">
-                  <span className="animate-fadeIn">
+                  <span className="animate-slideUp inline-block">
                     {loadingMessage}
                   </span>
                 </div>
@@ -218,7 +226,7 @@ function App() {
             )}
           </div>
 
-          <div className="mt-8">
+          <div className={`mt-8 transition-all duration-500 ${!isLoading ? 'animate-fadeInScale' : 'opacity-0'}`}>
             <Recommendations
               recommendations={recommendations}
               isLoading={isLoading}
