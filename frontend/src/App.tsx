@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
-import BookInput from './components/BookInput';
-import Recommendations from './components/Recommendations';
-import { Alert, AlertDescription } from './components/Alert';
-import confetti from 'canvas-confetti';
-import AnimatedBook from './components/AnimatedBook';
+import React, { useState } from "react";
+import BookInput from "./components/BookInput";
+import Recommendations from "./components/Recommendations";
+import { Alert, AlertDescription } from "./components/Alert";
+import confetti from "canvas-confetti";
+import AnimatedBook from "./components/AnimatedBook";
 
 interface Book {
   id: string;
@@ -24,16 +24,15 @@ const triggerConfetti = () => {
     particleCount: 100,
     spread: 70,
     origin: { y: 0.6 },
-    colors: ['#3B82F6', '#6366F1', '#A855F7'], // blue and indigo to match your theme
+    colors: ["#3B82F6", "#6366F1", "#A855F7"], // blue and indigo to match your theme
   });
 
-  // Add a second burst of confetti for more effect
   setTimeout(() => {
     confetti({
       particleCount: 50,
       spread: 50,
       origin: { y: 0.65 },
-      colors: ['#3B82F6', '#6366F1', '#A855F7'],
+      colors: ["#3B82F6", "#6366F1", "#A855F7"],
     });
   }, 200);
 };
@@ -44,7 +43,7 @@ function App() {
   const [loadingMessage, setLoadingMessage] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
-  
+
   const getLoadingMessage = (elapsedTime: number) => {
     if (elapsedTime < 10) return "Opening your book collection...";
     if (elapsedTime < 20) return "Reading through countless stories...";
@@ -58,36 +57,47 @@ function App() {
       setError("Please enter exactly 5 books for the best recommendations.");
       return;
     }
-    
+
     setIsLoading(true);
     setLoadingMessage("Starting your literary journey...");
     setError(null);
     setRecommendations([null, null]);
 
-    const makeRequest = async (attempt: number = 0): Promise<void> => {
+    const makeRequest = async (attempt = 0): Promise<void> => {
       const startTime = Date.now();
       const loadingUpdateInterval = setInterval(() => {
         const elapsedTime = Math.floor((Date.now() - startTime) / 1000);
         setLoadingMessage(getLoadingMessage(elapsedTime));
       }, 1000);
 
+      const timeoutDuration = 45000; // 45 seconds timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        controller.abort();
+      }, timeoutDuration);
+
       try {
-        console.log('Processing your book selection:', books);
-        const response = await fetch('https://book-recommender-api-affpgxcqgah8cvah.westus-01.azurewebsites.net/api/recommend', {
-          method: 'POST',
-          mode: 'cors',
-          credentials: 'omit',
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          },
-          body: JSON.stringify({ books })
-        });
-    
-        let errorMessage = '';
-        
+        console.log("Processing your book selection:", books);
+        const response = await fetch(
+          "https://book-recommender-api-affpgxcqgah8cvah.westus-01.azurewebsites.net/api/recommend",
+          {
+            method: "POST",
+            mode: "cors",
+            credentials: "omit",
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "application/json",
+            },
+            body: JSON.stringify({ books }),
+            signal: controller.signal,
+          }
+        );
+
+        clearTimeout(timeoutId);
+
         if (!response.ok) {
           const errorText = await response.text();
+          let errorMessage = "";
           try {
             const errorJson = JSON.parse(errorText);
             errorMessage = errorJson.error || `Unable to process request: ${response.status}`;
@@ -104,11 +114,10 @@ function App() {
         }
 
         if (data.recommendations?.length) {
-          // Delay setting recommendations slightly to allow for smooth transition
           setTimeout(() => {
             setRecommendations([
               data.recommendations[0] || null,
-              data.recommendations[1] || null
+              data.recommendations[1] || null,
             ]);
             triggerConfetti();
           }, 500);
@@ -116,31 +125,32 @@ function App() {
           setError("We couldn't find matching recommendations. Please try different books.");
           setRecommendations([null, null]);
         }
-        
+
         clearInterval(loadingUpdateInterval);
         setTimeout(() => {
           setIsLoading(false);
           setLoadingMessage("");
         }, 500);
         setRetryCount(0);
-
       } catch (error) {
-        console.error('Error processing recommendations:', error);
+        clearTimeout(timeoutId);
         clearInterval(loadingUpdateInterval);
-        
-        if (error instanceof Error && 
-            (error.message.includes('Failed to fetch') || 
-             error.message.includes('network')) &&
-            !error.message.includes('500') &&
-            attempt < 3) {
+        console.error("Error processing recommendations:", error);
+
+        if (
+          error instanceof Error &&
+          (error.message.includes("Failed to fetch") || error.message.includes("network")) &&
+          !error.message.includes("500") &&
+          attempt < 3
+        ) {
           setRetryCount(attempt + 1);
-          setError('Reconnecting to our library...');
+          setError("Reconnecting to our library...");
           setLoadingMessage("Retrying connection...");
-          await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+          await new Promise((resolve) => setTimeout(resolve, Math.pow(2, attempt) * 1000));
           return makeRequest(attempt + 1);
         }
-        
-        setError(error instanceof Error ? error.message : 'Unable to reach our library at the moment');
+
+        setError(error instanceof Error ? error.message : "Unable to reach our library at the moment");
         setRecommendations([null, null]);
         setIsLoading(false);
         setLoadingMessage("");
@@ -150,7 +160,7 @@ function App() {
     try {
       await makeRequest();
     } catch (error) {
-      console.error('Error in request:', error);
+      console.error("Error in request:", error);
       setIsLoading(false);
       setLoadingMessage("");
     }
@@ -161,10 +171,10 @@ function App() {
       <div className="container mx-auto py-12 px-4">
         <div className="text-center mb-12">
           <div className="flex items-center justify-center gap-4 mb-6">
-            <img 
-              src="/favicon.ico" 
-              alt="Read Next" 
-              className="w-16 h-16 md:w-20 md:h-20 transition-transform duration-300 hover:scale-105" 
+            <img
+              src="/favicon.ico"
+              alt="Read Next"
+              className="w-16 h-16 md:w-20 md:h-20 transition-transform duration-300 hover:scale-105"
             />
             <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 text-transparent bg-clip-text">
               Read Next
@@ -180,9 +190,7 @@ function App() {
             <AlertDescription>
               {error}
               {retryCount > 0 && (
-                <div className="mt-1">
-                  Retry attempt {retryCount} of 3...
-                </div>
+                <div className="mt-1">Retry attempt {retryCount} of 3...</div>
               )}
             </AlertDescription>
           </Alert>
@@ -198,11 +206,8 @@ function App() {
                 Enter 5 books you've enjoyed to get personalized recommendations
               </p>
             </div>
-            
-            <BookInput
-              onSubmit={handleBookSubmit}
-              isLoading={isLoading}
-            />
+
+            <BookInput onSubmit={handleBookSubmit} isLoading={isLoading} />
 
             {isLoading && loadingMessage && (
               <div className="mt-8 space-y-4 transition-all duration-500 transform">
@@ -210,19 +215,14 @@ function App() {
                   <AnimatedBook />
                 </div>
                 <div className="text-center text-gray-600 transition-opacity">
-                  <span className="animate-fadeIn">
-                    {loadingMessage}
-                  </span>
+                  <span className="animate-fadeIn">{loadingMessage}</span>
                 </div>
               </div>
             )}
           </div>
 
           <div className="mt-8">
-            <Recommendations
-              recommendations={recommendations}
-              isLoading={isLoading}
-            />
+            <Recommendations recommendations={recommendations} isLoading={isLoading} />
           </div>
         </div>
 
