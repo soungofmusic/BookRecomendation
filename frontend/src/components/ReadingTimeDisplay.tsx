@@ -6,9 +6,10 @@ interface ReadingTimeProps {
     average: { hours: number | null; minutes: number | null };
     fast: { hours: number | null; minutes: number | null };
   };
+  pageCount?: number;  // Add this prop
 }
 
-const ReadingTimeDisplay = ({ readingTime }: ReadingTimeProps) => {
+const ReadingTimeDisplay = ({ readingTime, pageCount }: ReadingTimeProps) => {
   if (!readingTime?.average?.hours && !readingTime?.average?.minutes) {
     return null;
   }
@@ -20,8 +21,13 @@ const ReadingTimeDisplay = ({ readingTime }: ReadingTimeProps) => {
 
   return (
     <div className="bg-white/90 rounded-lg p-4 shadow-sm">
-      <div className="mb-2">
+      <div className="mb-2 flex justify-between items-baseline">
         <h4 className="font-medium text-gray-800">📚 Reading Time Estimate</h4>
+        {pageCount && (
+          <span className="text-xs text-gray-500">
+            {pageCount} pages
+          </span>
+        )}
       </div>
       
       <div className="space-y-2 text-sm">

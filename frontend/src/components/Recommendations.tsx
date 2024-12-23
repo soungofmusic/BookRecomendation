@@ -158,12 +158,14 @@ const Recommendations: React.FC<RecommendationsProps> = ({
             ))}
           </div>
         )}
-        {/* Reading Time */}
-        {book.reading_time && (
-          <div className="mt-4">
-            <ReadingTimeDisplay readingTime={book.reading_time} />
-          </div>
-        )}
+       {book.reading_time && (
+        <div className="mt-4">
+          <ReadingTimeDisplay 
+            readingTime={book.reading_time} 
+            pageCount={book.page_count} 
+          />
+        </div>
+      )}
       </div>
     </div>
   );
