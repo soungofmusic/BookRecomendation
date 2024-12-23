@@ -81,7 +81,7 @@ function App() {
         
         // Add signal to allow timeout/cancellation
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 360000); // 360 second timeout
+        const timeoutId = setTimeout(() => controller.abort(), 600000); // 10 minutes timeout
 
         const response = await fetch('https://book-recommender-api-affpgxcqgah8cvah.westus-01.azurewebsites.net/api/recommend', {
           method: 'POST',
@@ -124,7 +124,7 @@ function App() {
               data.recommendations[1] || null
             ]);
             triggerConfetti();
-          }, 1000);
+          }, 2000);
         } else {
           setError("We couldn't find matching recommendations. Please try different books.");
           setRecommendations([null, null]);
