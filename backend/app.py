@@ -327,22 +327,44 @@ class BookRecommender:
                 print("Rate limit reached, falling back to basic generation")
                 return None
 
-            try:
-                chat_completion = self.groq_client.chat.completions.create(
-                    messages=[{
-                        "role": "user",
-                        "content": prompt
-                    }],
-                    model="llama3-8b-8192",
-                    temperature=0.7,
-                    max_tokens=max_tokens
-                )
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    print(f"Making Groq API call, attempt {attempt + 1}")
+                    start_time = time.time()
+                    
+                    # Set a longer timeout for the API call
+                    chat_completion = self.groq_client.chat.completions.create(
+                        messages=[{
+                            "role": "user",
+                            "content": prompt
+                        }],
+                        model="llama3-8b-8192",
+                        temperature=0.7,
+                        max_tokens=max_tokens,
+                        timeout=60  # 60 second timeout
+                    )
 
-                return chat_completion.choices[0].message.content
+                    response_time = time.time() - start_time
+                    print(f"Groq API response received in {response_time:.2f} seconds")
 
-            except Exception as e:
-                print(f"Error calling Groq API: {str(e)}")
-                return None
+                    if chat_completion.choices and chat_completion.choices[0].message.content:
+                        content = chat_completion.choices[0].message.content.strip()
+                        if len(content) > 10:  # Ensure we have meaningful content
+                            return content
+                        else:
+                            raise Exception("Response too short")
+
+                except Exception as e:
+                    print(f"Groq API attempt {attempt + 1} failed: {str(e)}")
+                    if attempt < max_retries - 1:
+                        time.sleep(2 ** attempt)  # Exponential backoff
+                    else:
+                        print("All retries failed")
+                        return None
+                        
+            return None
+
         except Exception as e:
             print(f"Unexpected error in call_groq_api: {str(e)}")
             return None
@@ -520,23 +542,63 @@ def get_recommendations():
                 reverse=True
             )[:2]
 
-            # Enhance recommendations with AI (optional)
             for recommendation in final_recommendations:
                 try:
                     book_id = recommendation['id']
                     book_details = recommender.get_book_details(book_id)
                     if book_details:
-                        new_explanation = recommender.generate_similarity_explanation_with_ai(
-                            book_details, input_books, recommendation['similarity_score']
-                        )
-                        why_read = recommender.generate_reading_recommendation_with_ai(book_details, input_books)
-
-                        if new_explanation:
-                            recommendation['explanation'] = new_explanation
-                        if why_read:
-                            recommendation['why_read'] = why_read
+                        max_retries = 3
+                        for attempt in range(max_retries):
+                            try:
+                                print(f"Attempt {attempt + 1} for AI content generation for {book_id}")
+                                
+                                # Generate explanation first
+                                new_explanation = recommender.generate_similarity_explanation_with_ai(
+                                    book_details, input_books, recommendation['similarity_score']
+                                )
+                                if new_explanation and len(new_explanation.strip()) > 10:
+                                    recommendation['explanation'] = new_explanation
+                                    print(f"Successfully generated explanation: {len(new_explanation)} chars")
+                                
+                                # Add a small delay between API calls
+                                time.sleep(1)
+                                
+                                # Then generate why_read
+                                why_read = recommender.generate_reading_recommendation_with_ai(book_details, input_books)
+                                if why_read and len(why_read.strip()) > 10:
+                                    recommendation['why_read'] = why_read
+                                    print(f"Successfully generated why_read: {len(why_read)} chars")
+                                    break  # Break only if both generations are successful
+                                    
+                                if not why_read or not new_explanation:
+                                    raise Exception("Empty AI response")
+                                    
+                            except Exception as retry_e:
+                                print(f"Retry {attempt + 1} failed: {str(retry_e)}")
+                                if attempt == max_retries - 1:
+                                    # On final retry failure, ensure we have fallback content
+                                    if not recommendation.get('explanation'):
+                                        recommendation['explanation'] = recommender.generate_explanation(
+                                            book_details, input_books, recommendation['similarity_score']
+                                        )
+                                    if not recommendation.get('why_read'):
+                                        recommendation['why_read'] = recommender.generate_reading_recommendation(
+                                            book_details, input_books
+                                        )
+                                    break
+                                time.sleep(2 ** attempt)  # Exponential backoff
                 except Exception as e:
                     print(f"Error enhancing recommendation: {str(e)}")
+                    # Ensure fallback content is present
+                    if not recommendation.get('explanation'):
+                        recommendation['explanation'] = recommender.generate_explanation(
+                            book_details, input_books, recommendation['similarity_score']
+                        )
+                    if not recommendation.get('why_read'):
+                        recommendation['why_read'] = recommender.generate_reading_recommendation(
+                            book_details, input_books
+                        )
+
 
             # Return final JSON response
             return jsonify({
