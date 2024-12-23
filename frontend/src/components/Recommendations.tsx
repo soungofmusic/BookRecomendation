@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import ReadingTimeDisplay from './ReadingTimeDisplay';
 
 interface Book {
   id: string;
@@ -14,8 +15,9 @@ interface Book {
   why_read?: string;
   page_count?: number;
   reading_time?: {
-    hours?: number;
-    minutes?: number;
+    slow: { hours: number | null; minutes: number | null };
+    average: { hours: number | null; minutes: number | null };
+    fast: { hours: number | null; minutes: number | null };
   };
 }
 
@@ -31,17 +33,6 @@ const Tooltip: React.FC<{ content: string; children: React.ReactNode }> = ({ con
     </div>
   </div>
 );
-
-const getReadingTime = (pageCount: number | undefined): string => {
-  if (!pageCount) return 'Reading time unavailable';
-  const avgReadingSpeed = 2; // minutes per page
-  const totalMinutes = pageCount * avgReadingSpeed;
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-  return hours > 0 
-    ? `~${hours}h ${minutes}m read`
-    : `~${minutes}m read`;
-};
 
 interface RecommendationsProps {
   recommendations: (Book | null)[];
@@ -91,7 +82,6 @@ const Recommendations: React.FC<RecommendationsProps> = ({
                     {book.page_count && (
                       <p className="mb-1">{book.page_count} pages</p>
                     )}
-                    <p>{getReadingTime(book.page_count)}</p>
                   </div>
                 </div>
               </>
@@ -166,6 +156,12 @@ const Recommendations: React.FC<RecommendationsProps> = ({
                 {genre}
               </span>
             ))}
+          </div>
+        )}
+        {/* Reading Time */}
+        {book.reading_time && (
+          <div className="mt-4">
+            <ReadingTimeDisplay readingTime={book.reading_time} />
           </div>
         )}
       </div>

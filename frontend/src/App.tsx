@@ -17,6 +17,11 @@ interface Book {
   basic_recommendation?: string;
   ai_recommendation?: string;
   why_read?: string;
+  reading_time?: {
+    slow: { hours: number | null; minutes: number | null };
+    average: { hours: number | null; minutes: number | null };
+    fast: { hours: number | null; minutes: number | null };
+  };
 }
 
 const triggerConfetti = () => {

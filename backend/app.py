@@ -153,21 +153,56 @@ class BookRecommender:
             print(f"Error fetching book details: {str(e)}")
             return None
 
-    def calculate_reading_time(self, page_count: Optional[int]) -> dict:
+    def calculate_reading_time(self, page_count: Optional[int], genres: Optional[List[str]] = None) -> dict:
+        """
+        Calculate estimated reading time based on page count and book genres.
+        """
         if not page_count:
-            return {'hours': None, 'minutes': None}
+            return {
+                'slow': {'hours': None, 'minutes': None},
+                'average': {'hours': None, 'minutes': None},
+                'fast': {'hours': None, 'minutes': None}
+            }
 
-        avg_words_per_page = 250
-        avg_reading_speed = 200
+        # Words per page varies by genre and format
+        base_words_per_page = 250  # standard baseline
+        
+        # Adjust words per page based on genre
+        if genres:
+            genres_lower = [g.lower() for g in genres]
+            
+            if any(g in genres_lower for g in ['textbook', 'academic', 'science', 'mathematics', 'technical']):
+                words_per_page = base_words_per_page * 0.8
+            elif any(g in genres_lower for g in ['fiction', 'novel', 'story', 'fantasy', 'mystery']):
+                words_per_page = base_words_per_page * 1.2
+            elif any(g in genres_lower for g in ['poetry', 'children', 'juvenile', 'picture book']):
+                words_per_page = base_words_per_page * 0.5
+            else:
+                words_per_page = base_words_per_page
+        else:
+            words_per_page = base_words_per_page
 
-        total_minutes = (page_count * avg_words_per_page) / avg_reading_speed
-        hours = int(total_minutes // 60)
-        minutes = int(total_minutes % 60)
-
-        return {
-            'hours': hours,
-            'minutes': minutes
+        # Different reading speeds (words per minute)
+        reading_speeds = {
+            'slow': 150,      # Careful, detailed reading
+            'average': 250,   # Average adult reading speed
+            'fast': 400       # Speed reading
         }
+        
+        total_words = page_count * words_per_page
+        
+        reading_times = {}
+        for speed_type, wpm in reading_speeds.items():
+            total_minutes = total_words / wpm
+            hours = int(total_minutes // 60)
+            minutes = int(total_minutes % 60)
+            
+            reading_times[speed_type] = {
+                'hours': hours,
+                'minutes': minutes
+            }
+        
+        return reading_times
 
     def calculate_similarity_score(self, candidate_book: Dict, input_books: List[Dict]) -> float:
         weights = {
@@ -455,7 +490,10 @@ def get_recommendations():
                                 basic_reading_rec = recommender.generate_reading_recommendation(book_details, input_books)
 
                                 cover_id = b.get('cover_i')
-                                reading_time = recommender.calculate_reading_time(book_details.get('number_of_pages'))
+                                reading_time = recommender.calculate_reading_time(
+                                    book_details.get('number_of_pages'),
+                                    b.get('subject',[])
+                                )
 
                                 recommendation = {
                                     'id': book_id,
