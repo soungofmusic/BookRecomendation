@@ -4,6 +4,8 @@ export const AnimatedBook: React.FC = () => {
   return (
     <div className="w-36 h-48 perspective-1000 mx-auto">
       <div className="relative w-full h-full animate-float">
+        {/* Outline wrapper */}
+        <div className="absolute -inset-0.5 bg-blue-400/50 rounded-r-lg rounded-l-sm blur-[0.5px]" />
         {/* Book cover with gradient */}
         <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-indigo-500 rounded-r-lg rounded-l-sm shadow-xl">
           {/* Book spine with enhanced details */}
