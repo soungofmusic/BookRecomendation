@@ -6,11 +6,20 @@ interface ReadingTimeProps {
     average: { hours: number | null; minutes: number | null };
     fast: { hours: number | null; minutes: number | null };
   };
-  pageCount?: number;  // Add this prop
+  pageCount?: number;
 }
 
-const ReadingTimeDisplay = ({ readingTime, pageCount }: ReadingTimeProps) => {
-  if (!readingTime?.average?.hours && !readingTime?.average?.minutes) {
+const ReadingTimeDisplay: React.FC<ReadingTimeProps> = ({ readingTime, pageCount }) => {
+  console.log('ReadingTimeDisplay received:', {
+    readingTime,
+    pageCount,
+    hasSlowTime: readingTime?.slow,
+    hasAverageTime: readingTime?.average,
+    hasFastTime: readingTime?.fast
+  });
+
+  if (!readingTime || !readingTime.average) {
+    console.log('Reading time data missing or invalid');
     return null;
   }
 
@@ -33,17 +42,23 @@ const ReadingTimeDisplay = ({ readingTime, pageCount }: ReadingTimeProps) => {
       <div className="space-y-2 text-sm">
         <div className="flex justify-between items-center">
           <span className="text-gray-600">Detailed reading:</span>
-          <span className="font-medium">{formatTime(readingTime.slow.hours, readingTime.slow.minutes)}</span>
+          <span className="font-medium">
+            {readingTime?.slow && formatTime(readingTime.slow.hours, readingTime.slow.minutes)}
+          </span>
         </div>
         
         <div className="flex justify-between items-center">
           <span className="text-gray-600">Average pace:</span>
-          <span className="font-medium">{formatTime(readingTime.average.hours, readingTime.average.minutes)}</span>
+          <span className="font-medium">
+            {readingTime?.average && formatTime(readingTime.average.hours, readingTime.average.minutes)}
+          </span>
         </div>
         
         <div className="flex justify-between items-center">
           <span className="text-gray-600">Speed reading:</span>
-          <span className="font-medium">{formatTime(readingTime.fast.hours, readingTime.fast.minutes)}</span>
+          <span className="font-medium">
+            {readingTime?.fast && formatTime(readingTime.fast.hours, readingTime.fast.minutes)}
+          </span>
         </div>
       </div>
       

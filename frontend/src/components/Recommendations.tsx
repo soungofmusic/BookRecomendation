@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import ReadingTimeDisplay from './ReadingTimeDisplay';
+import LibraryFinder from './LibraryFinder';
 
 interface Book {
   id: string;
@@ -144,8 +145,8 @@ const Recommendations: React.FC<RecommendationsProps> = ({
         </div>
         )}
 
-        {/* Genres */}
-        {book.genres && book.genres.length > 0 && (
+         {/* Genres */}
+         {book.genres && book.genres.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-1">
             {book.genres.map((genre, index) => (
               <span 
@@ -158,7 +159,20 @@ const Recommendations: React.FC<RecommendationsProps> = ({
             ))}
           </div>
         )}
-       {book.reading_time && (
+
+        {/* Add Library Finder here */}
+        <LibraryFinder 
+          title={book.title}
+          author={book.author}
+        />
+      {/* Reading Time Section */}
+      {console.log('Book data for reading time:', {
+        title: book.title,
+        pageCount: book.page_count,
+        hasReadingTime: !!book.reading_time,
+        readingTimeData: book.reading_time,
+      })}
+      {book.reading_time && (
         <div className="mt-4">
           <ReadingTimeDisplay 
             readingTime={book.reading_time} 
