@@ -342,7 +342,7 @@ class BookRecommender:
                         model="llama3-8b-8192",
                         temperature=0.7,
                         max_tokens=max_tokens,
-                        timeout=60  # 60 second timeout
+                        timeout=150  # 150 second timeout
                     )
 
                     response_time = time.time() - start_time
