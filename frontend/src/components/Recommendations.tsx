@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import LibraryFinder from './LibraryFinder';
+import BookSkeleton from './BookSkeleton';
 
 // Interfaces
 interface Book {
@@ -173,7 +174,20 @@ const Recommendations: React.FC<RecommendationsProps> = ({
   };
 
   if (isLoading) {
-    return null;
+    return (
+      <div className="mt-8">
+        <h2 className="text-2xl font-bold mb-6 text-center bg-gradient-to-r from-blue-600 to-indigo-600 text-transparent bg-clip-text">
+          Finding Your Next Books...
+        </h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {[1, 2].map((index) => (
+            <div key={index} className="animate-fadeIn">
+              <BookSkeleton />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
   }
 
   return (

@@ -40,7 +40,6 @@ module.exports = {
           '75%': { transform: 'rotateY(-20deg)' },
           '100%': { transform: 'rotateY(0deg)' },
         },
-        // New animations
         bookBounce: {
           '0%, 100%': { transform: 'translateY(0) rotate(-3deg)' },
           '50%': { transform: 'translateY(-20px) rotate(3deg)' },
@@ -57,6 +56,10 @@ module.exports = {
           '0%': { transform: 'rotateY(0deg) scale(1)' },
           '50%': { transform: 'rotateY(180deg) scale(1.1)' },
           '100%': { transform: 'rotateY(360deg) scale(1)' },
+        },
+        skeletonLoading: {
+          '0%': { backgroundPosition: '200% 0' },
+          '100%': { backgroundPosition: '-200% 0' }
         }
       },
       animation: {
@@ -71,7 +74,15 @@ module.exports = {
         bookBounce: 'bookBounce 3s ease-in-out infinite',
         slideUp: 'slideUp 0.5s ease-out forwards',
         fadeInScale: 'fadeInScale 0.5s ease-out forwards',
-        bookFlip: 'bookFlip 2s ease-in-out infinite'
+        bookFlip: 'bookFlip 2s ease-in-out infinite',
+        skeletonLoading: 'skeletonLoading 1.5s infinite linear'
+      },
+      backgroundImage: {
+        'shimmer-gradient': 'linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.2) 20%, rgba(255,255,255,0.5) 60%, rgba(255,255,255,0))',
+        'skeleton-gradient': 'linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%)',
+      },
+      backgroundSize: {
+        'skeleton': '200% 100%',
       }
     },
   },
