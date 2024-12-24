@@ -342,7 +342,7 @@ class BookRecommender:
                         model="llama3-8b-8192",
                         temperature=0.7,
                         max_tokens=max_tokens,
-                        timeout=150  # 150 second timeout
+                        timeout=450  # 150 second timeout
                     )
 
                     response_time = time.time() - start_time
@@ -397,7 +397,7 @@ class BookRecommender:
         - Favorite Genres: {', '.join(list(set(sum([b.get('subjects', [])[:3] for b in input_books], []))))}
         - Preferred Era: Around {int(avg_year) if avg_year else 'Unknown'}
 
-        Explain why this book would appeal to the reader based on these matches. Use 2nd person like you and your. Focus on specific connections and shared elements. Keep it concise (4-5 sentences) and analytical."""
+        Explain why this book would appeal to the reader based on these matches. Use 2nd person like you and your. Please don't mention the date. Focus on specific connections and shared elements. Keep it concise (4-5 sentences) and analytical."""
 
         response = self.call_groq_api(prompt, max_tokens=256)
         if response:
@@ -420,7 +420,7 @@ class BookRecommender:
         5. What lasting impact or insights readers can expect to gain
 
         Write in an enthusiastic, persuasive tone that makes readers excited to start the book.
-        Use 2nd person like you and your.
+        Use 2nd person like you and your. Do not mention the date.
         Provide specific details and compelling reasons.
         Aim for 4-6 sentences that paint a vivid picture of the reading experience."""
 
@@ -453,7 +453,8 @@ def get_recommendations():
                 print(f"Processing book: {title}")
                 response = requests.get(
                     OPEN_LIBRARY_SEARCH,
-                    params={'q': title, 'fields': 'key,title,author_name,first_publish_year,subject,cover_i', 'limit': 1}
+                    params={'q': title, 'fields': 'key,title,author_name,first_publish_year,subject,cover_i', 'limit': 1},
+                    timeout=180
                 )
 
                 if not response.ok:
