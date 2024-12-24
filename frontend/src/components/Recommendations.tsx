@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import ReadingTimeDisplay from './ReadingTimeDisplay';
 import LibraryFinder from './LibraryFinder';
 
+// Interfaces
 interface Book {
   id: string;
   title: string;
@@ -14,32 +14,33 @@ interface Book {
   basic_recommendation?: string;
   ai_recommendation?: string;
   why_read?: string;
-  page_count?: number;
-  reading_time?: {
-    slow: { hours: number | null; minutes: number | null };
-    average: { hours: number | null; minutes: number | null };
-    fast: { hours: number | null; minutes: number | null };
-  };
 }
-
-const Tooltip: React.FC<{ content: string; children: React.ReactNode }> = ({ content, children }) => (
-  <div className="group relative inline-block">
-    {children}
-    <div className="opacity-0 invisible group-hover:opacity-100 group-hover:visible 
-                  transition-opacity duration-200 absolute -top-2 left-1/2 -translate-x-1/2 
-                  -translate-y-full bg-gray-900 text-white text-sm rounded px-2 py-1 w-48 z-10">
-      {content}
-      <div className="absolute top-full left-1/2 -translate-x-1/2 -translate-y-1/2 
-                    border-4 border-transparent border-t-gray-900" />
-    </div>
-  </div>
-);
 
 interface RecommendationsProps {
   recommendations: (Book | null)[];
   isLoading: boolean;
 }
 
+interface TooltipProps {
+  content: string;
+  children: React.ReactNode;
+}
+
+// Tooltip Component
+const Tooltip: React.FC<TooltipProps> = ({ content, children }) => (
+  <div className="group relative inline-block">
+    {children}
+    <div className="opacity-0 invisible group-hover:opacity-100 group-hover:visible 
+                    transition-opacity duration-200 absolute -top-2 left-1/2 -translate-x-1/2 
+                    -translate-y-full bg-gray-900 text-white text-sm rounded px-2 py-1 w-48 z-10">
+      {content}
+      <div className="absolute top-full left-1/2 -translate-x-1/2 -translate-y-1/2 
+                      border-4 border-transparent border-t-gray-900" />
+    </div>
+  </div>
+);
+
+// Main Component
 const Recommendations: React.FC<RecommendationsProps> = ({
   recommendations,
   isLoading
@@ -51,16 +52,14 @@ const Recommendations: React.FC<RecommendationsProps> = ({
   }, [recommendations]);
 
   const renderBook = (book: Book) => {
-    console.log('Book data for reading time:', {
+    console.log('Book data:', {
       title: book.title,
-      pageCount: book.page_count,
-      hasReadingTime: !!book.reading_time,
-      readingTimeData: book.reading_time,
     });
 
     return (
       <div className="bg-white rounded-lg shadow hover:shadow-xl transition-all duration-300">
         <div className="p-4">
+          {/* Book Cover and Details Section */}
           <div className="flex gap-4">
             {/* Book Cover */}
             <div className="relative flex-shrink-0 w-24 h-36 bg-gray-100 rounded overflow-hidden group">
@@ -86,13 +85,7 @@ const Recommendations: React.FC<RecommendationsProps> = ({
                     }}
                   />
                   <div className="absolute inset-0 bg-black bg-opacity-50 opacity-0 group-hover:opacity-100
-                                transition-opacity duration-300 flex flex-col justify-end p-2">
-                    <div className="text-white text-xs">
-                      {book.page_count && (
-                        <p className="mb-1">{book.page_count} pages</p>
-                      )}
-                    </div>
-                  </div>
+                                transition-opacity duration-300 flex flex-col justify-end p-2" />
                 </>
               ) : (
                 <div className="w-full h-full flex items-center justify-center bg-gradient-to-b from-blue-50 to-white">
@@ -109,6 +102,7 @@ const Recommendations: React.FC<RecommendationsProps> = ({
                 <p className="text-gray-500 text-sm">Published {book.year}</p>
               )}
               
+              {/* Similarity Score */}
               {book.similarity_score !== undefined && (
                 <div className="mt-2">
                   <Tooltip content="Match score based on your preferences">
@@ -131,26 +125,26 @@ const Recommendations: React.FC<RecommendationsProps> = ({
 
           {/* Score Explanation */}
           {book.explanation && (
-          <div className="mt-4 p-3 bg-gradient-to-br from-indigo-50 to-purple-50 rounded-lg">
+            <div className="mt-4 p-3 bg-gradient-to-br from-indigo-50 to-purple-50 rounded-lg">
               <h4 className="text-sm font-semibold text-indigo-700 mb-2">
-              Why This Match?
+                Why This Match?
               </h4>
               <p className="text-sm text-indigo-800 leading-relaxed">
-              {book.explanation}
+                {book.explanation}
               </p>
-          </div>
+            </div>
           )}
 
           {/* Why Read This Book */}
           {book.why_read && (
-          <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+            <div className="mt-4 p-3 bg-gray-50 rounded-lg">
               <h4 className="text-sm font-semibold text-gray-700 mb-2">
-              Why Read This Book?
+                Why Read This Book?
               </h4>
               <p className="text-sm text-gray-600 leading-relaxed">
-              {book.why_read}
+                {book.why_read}
               </p>
-          </div>
+            </div>
           )}
 
           {/* Genres */}
@@ -160,7 +154,7 @@ const Recommendations: React.FC<RecommendationsProps> = ({
                 <span 
                   key={genre}
                   className="px-2 py-0.5 bg-gray-100 text-gray-700 text-xs rounded
-                          hover:bg-gray-200 transition-colors duration-150"
+                            hover:bg-gray-200 transition-colors duration-150"
                 >
                   {genre}
                 </span>
@@ -168,28 +162,18 @@ const Recommendations: React.FC<RecommendationsProps> = ({
             </div>
           )}
 
-          {/* Add Library Finder here */}
+          {/* Library Finder */}
           <LibraryFinder 
             title={book.title}
             author={book.author}
           />
-        
-          {/* Reading Time Section */}
-          {book.reading_time && (
-            <div className="mt-4">
-              <ReadingTimeDisplay 
-                readingTime={book.reading_time} 
-                pageCount={book.page_count} 
-              />
-            </div>
-          )}
         </div>
       </div>
     );
   };
 
   if (isLoading) {
-    return null; // Loading state handled in App.tsx
+    return null;
   }
 
   return (
