@@ -130,21 +130,21 @@ class BookRecommender:
             return None
 
     def get_book_details(self, book_id: str) -> Dict[str, Any]:
-        try:
-            print(f"Fetching details for book ID: {book_id}")
-            for attempt in range(MAX_RETRIES):
-                try:
-                    work_response = requests.get(
-                        f"{OPEN_LIBRARY_WORKS}{book_id}.json",
-                        timeout=OPENLIB_TIMEOUT                        
-                    )
-                    if not work_response.ok:
-                        print(f"Failed to fetch book details: {work_response.status_code}")
-                        print(f"Response content: {work_response.text}")
-                        if attempt < MAX_RETRIES - 1:
-                            time.sleep(2 ** attempt)
-                            continue
-                        return None
+    try:
+        print(f"Fetching details for book ID: {book_id}")
+        for attempt in range(MAX_RETRIES):
+            try:
+                work_response = requests.get(
+                    f"{OPEN_LIBRARY_WORKS}{book_id}.json",
+                    timeout=OPENLIB_TIMEOUT                        
+                )
+                if not work_response.ok:
+                    print(f"Failed to fetch book details: {work_response.status_code}")
+                    print(f"Response content: {work_response.text}")
+                    if attempt < MAX_RETRIES - 1:
+                        time.sleep(2 ** attempt)
+                        continue
+                    return None
 
                 work_data = work_response.json()
 
@@ -164,21 +164,22 @@ class BookRecommender:
                         work_data['number_of_pages'] = edition_data['docs'][0].get('number_of_pages')
 
                 return work_data
-            except requests.exceptions.Timeout:
-                    print(f"Timeout on attempt {attempt + 1}")
-                    if attempt == MAX_RETRIES - 1:
-                        return None
-                    time.sleep(2 ** attempt)
-            except Exception as e:
-                 print(f"Error on attempt {attempt + 1}: {str(e)}")
-                    if attempt == MAX_RETRIES - 1:
-                        return None
-                    time.sleep(2 ** attempt)
 
+            except requests.exceptions.Timeout:
+                print(f"Timeout on attempt {attempt + 1}")
+                if attempt == MAX_RETRIES - 1:
+                    return None
+                time.sleep(2 ** attempt)
+            except Exception as e:
+                print(f"Error on attempt {attempt + 1}: {str(e)}")
+                if attempt == MAX_RETRIES - 1:
+                    return None
+                time.sleep(2 ** attempt)
+                
         return None
-     except Exception as e:
-            print(f"Error fetching book details: {str(e)}")
-            return None
+    except Exception as e:
+        print(f"Error fetching book details: {str(e)}")
+        return None
 
     def calculate_reading_time(self, page_count: Optional[int], genres: Optional[List[str]] = None) -> dict:
         """
