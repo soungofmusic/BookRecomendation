@@ -471,10 +471,6 @@ def get_recommendations():
                                 basic_reading_rec = recommender.generate_reading_recommendation(book_details, input_books)
 
                                 cover_id = b.get('cover_i')
-                                reading_time = recommender.calculate_reading_time(
-                                    book_details.get('number_of_pages'),
-                                    b.get('subject',[])
-                                )
 
                                 recommendation = {
                                     'id': book_id,
