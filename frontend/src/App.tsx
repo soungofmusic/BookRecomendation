@@ -14,8 +14,6 @@ interface Book {
   similarity_score?: number;
   explanation?: string;
   cover_url?: string;
-  basic_recommendation?: string;
-  ai_recommendation?: string;
   why_read?: string;
 }
 
@@ -24,10 +22,9 @@ const triggerConfetti = () => {
     particleCount: 100,
     spread: 70,
     origin: { y: 0.6 },
-    colors: ['#3B82F6', '#6366F1', '#A855F7'], // blue and indigo to match your theme
+    colors: ['#3B82F6', '#6366F1', '#A855F7'],
   });
 
-  // Add a second burst of confetti for more effect
   setTimeout(() => {
     confetti({
       particleCount: 50,
@@ -77,11 +74,8 @@ function App() {
       }, 1000);
 
       try {
-        console.log('Processing your book selection:', books);
-        
-        // Add signal to allow timeout/cancellation
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 900000); // 15 minutes timeout
+        const timeoutId = setTimeout(() => controller.abort(), 900000);
 
         const response = await fetch('https://book-recommender-api-affpgxcqgah8cvah.westus-01.azurewebsites.net/api/recommend', {
           method: 'POST',
@@ -97,16 +91,16 @@ function App() {
     
         clearTimeout(timeoutId);
 
-        let errorMessage = '';
-        
         if (!response.ok) {
           const errorText = await response.text();
-          try {
-            const errorJson = JSON.parse(errorText);
-            errorMessage = errorJson.error || `Unable to process request: ${response.status}`;
-          } catch (e) {
-            errorMessage = errorText || `Unable to process request: ${response.status}`;
-          }
+          const errorMessage = (() => {
+            try {
+              const errorJson = JSON.parse(errorText);
+              return errorJson.error || `Unable to process request: ${response.status}`;
+            } catch {
+              return errorText || `Unable to process request: ${response.status}`;
+            }
+          })();
           throw new Error(errorMessage);
         }
 
@@ -117,7 +111,6 @@ function App() {
         }
 
         if (data.recommendations?.length) {
-          // Longer delay for setting recommendations
           setTimeout(() => {
             setRecommendations([
               data.recommendations[0] || null,
@@ -149,7 +142,6 @@ function App() {
           setRetryCount(attempt + 1);
           setError('Reconnecting to our library...');
           setLoadingMessage("Retrying connection...");
-          // Increased exponential backoff
           await new Promise(resolve => setTimeout(resolve, Math.pow(3, attempt) * 2000));
           return makeRequest(attempt + 1);
         }
