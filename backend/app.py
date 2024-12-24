@@ -342,7 +342,7 @@ class BookRecommender:
                         model="llama3-8b-8192",
                         temperature=0.7,
                         max_tokens=max_tokens,
-                        timeout=450  # 150 second timeout
+                        timeout=600  # 150 second timeout
                     )
 
                     response_time = time.time() - start_time
@@ -454,7 +454,7 @@ def get_recommendations():
                 response = requests.get(
                     OPEN_LIBRARY_SEARCH,
                     params={'q': title, 'fields': 'key,title,author_name,first_publish_year,subject,cover_i', 'limit': 1},
-                    timeout=180
+                    timeout=600
                 )
 
                 if not response.ok:
