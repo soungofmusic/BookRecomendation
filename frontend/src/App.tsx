@@ -4,6 +4,8 @@ import Recommendations from './components/Recommendations';
 import { Alert, AlertDescription } from './components/Alert';
 import confetti from 'canvas-confetti';
 import AnimatedBook from './components/AnimatedBook';
+import ThemeToggle from './components/ThemeToggle';
+import { ThemeProvider } from './contexts/ThemeContext';
 
 interface Book {
   id: string;
@@ -163,80 +165,84 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50">
-      <div className="container mx-auto py-12 px-4">
-        <div className="text-center mb-12">
-          <div className="flex items-center justify-center gap-4 mb-6">
-            <img 
-              src="/favicon.ico" 
-              alt="Read Next" 
-              className="w-16 h-16 md:w-20 md:h-20 transition-transform duration-300 hover:scale-105" 
-            />
-            <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 text-transparent bg-clip-text">
-              Read Next
-            </h1>
+    <ThemeProvider>
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-gray-900 dark:to-gray-800 transition-colors duration-200">
+        <ThemeToggle />
+        <div className="container mx-auto py-12 px-4">
+          <div className="text-center mb-12">
+            <div className="flex items-center justify-center gap-4 mb-6">
+              <img 
+                src="/favicon.ico" 
+                alt="Read Next" 
+                className="w-16 h-16 md:w-20 md:h-20 transition-transform duration-300 hover:scale-105" 
+              />
+              <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 
+                           dark:from-blue-400 dark:to-indigo-400 text-transparent bg-clip-text">
+                Read Next
+              </h1>
+            </div>
+            <p className="text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
+              Share 5 books you love, and we'll find your perfect next reads
+            </p>
           </div>
-          <p className="text-gray-600 max-w-2xl mx-auto">
-            Share 5 books you love, and we'll find your perfect next reads
-          </p>
-        </div>
 
-        {error && (
-          <Alert variant="destructive" className="mb-8 animate-fadeIn">
-            <AlertDescription>
-              {error}
-              {retryCount > 0 && (
-                <div className="mt-1">
-                  Retry attempt {retryCount} of 3...
+          {error && (
+            <Alert variant="destructive" className="mb-8 animate-fadeIn">
+              <AlertDescription>
+                {error}
+                {retryCount > 0 && (
+                  <div className="mt-1">
+                    Retry attempt {retryCount} of 3...
+                  </div>
+                )}
+              </AlertDescription>
+            </Alert>
+          )}
+
+          <div className="max-w-4xl mx-auto">
+            <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-xl shadow-xl p-6 mb-8 transition-all duration-300 hover:shadow-2xl">
+              <div className="mb-6">
+                <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-100 mb-2">
+                  Your Favorite Books
+                </h2>
+                <p className="text-gray-600 dark:text-gray-400 text-sm">
+                  Enter 5 books you've enjoyed to get personalized recommendations
+                </p>
+              </div>
+              
+              <BookInput
+                onSubmit={handleBookSubmit}
+                isLoading={isLoading}
+              />
+
+              {isLoading && loadingMessage && (
+                <div className="mt-8 space-y-4 transition-all duration-500 transform animate-fadeInScale">
+                  <div className="animate-bookBounce">
+                    <AnimatedBook />
+                  </div>
+                  <div className="text-center text-gray-600 dark:text-gray-400 transition-opacity">
+                    <span className="animate-slideUp inline-block">
+                      {loadingMessage}
+                    </span>
+                  </div>
                 </div>
               )}
-            </AlertDescription>
-          </Alert>
-        )}
-
-        <div className="max-w-4xl mx-auto">
-          <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-xl p-6 mb-8 transition-all duration-300 hover:shadow-2xl">
-            <div className="mb-6">
-              <h2 className="text-xl font-semibold text-gray-800 mb-2">
-                Your Favorite Books
-              </h2>
-              <p className="text-gray-600 text-sm">
-                Enter 5 books you've enjoyed to get personalized recommendations
-              </p>
             </div>
-            
-            <BookInput
-              onSubmit={handleBookSubmit}
-              isLoading={isLoading}
-            />
 
-            {isLoading && loadingMessage && (
-              <div className="mt-8 space-y-4 transition-all duration-500 transform animate-fadeInScale">
-                <div className="animate-bookBounce">
-                  <AnimatedBook />
-                </div>
-                <div className="text-center text-gray-600 transition-opacity">
-                  <span className="animate-slideUp inline-block">
-                    {loadingMessage}
-                  </span>
-                </div>
-              </div>
-            )}
+            <div className={`mt-8 transition-all duration-500 ${!isLoading ? 'animate-fadeInScale' : 'opacity-0'}`}>
+              <Recommendations
+                recommendations={recommendations}
+                isLoading={isLoading}
+              />
+            </div>
           </div>
 
-          <div className={`mt-8 transition-all duration-500 ${!isLoading ? 'animate-fadeInScale' : 'opacity-0'}`}>
-            <Recommendations
-              recommendations={recommendations}
-              isLoading={isLoading}
-            />
-          </div>
+          <footer className="mt-16 text-center text-gray-500 dark:text-gray-400 text-sm">
+            <p>Powered by Open Library API & Meta Llama</p>
+          </footer>
         </div>
-
-        <footer className="mt-16 text-center text-gray-500 text-sm">
-          <p>Powered by Open Library API & Meta Llama</p>
-        </footer>
       </div>
-    </div>
+    </ThemeProvider>
   );
 }
 
