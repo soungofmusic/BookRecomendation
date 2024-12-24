@@ -30,6 +30,12 @@ OPEN_LIBRARY_SEARCH = "https://openlibrary.org/search.json"
 OPEN_LIBRARY_WORKS = "https://openlibrary.org/works/"
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 
+# Timeout configurations
+GROQ_TIMEOUT = 900  # 15 minutes
+OPENLIB_TIMEOUT = 120  # 2 minutes
+MAX_RETRIES = 5
+
+
 @app.route('/')
 def home():
     return "Book Recommendation API is running!"
@@ -126,30 +132,51 @@ class BookRecommender:
     def get_book_details(self, book_id: str) -> Dict[str, Any]:
         try:
             print(f"Fetching details for book ID: {book_id}")
-            work_response = requests.get(f"{OPEN_LIBRARY_WORKS}{book_id}.json")
-            if not work_response.ok:
-                print(f"Failed to fetch book details: {work_response.status_code}")
-                print(f"Response content: {work_response.text}")
-                return None
+            for attempt in range(MAX_RETRIES):
+                try:
+                    work_response = requests.get(
+                        f"{OPEN_LIBRARY_WORKS}{book_id}.json",
+                        timeout=OPENLIB_TIMEOUT                        
+                    )
+                    if not work_response.ok:
+                        print(f"Failed to fetch book details: {work_response.status_code}")
+                        print(f"Response content: {work_response.text}")
+                        if attempt < MAX_RETRIES - 1:
+                            time.sleep(2 ** attempt)
+                            continue
+                        return None
 
-            work_data = work_response.json()
+                work_data = work_response.json()
 
-            edition_search = requests.get(
-                "https://openlibrary.org/search.json",
-                params={
-                    'q': f'key:/works/{book_id}',
-                    'fields': 'number_of_pages,key',
-                    'limit': 1
-                }
-            )
+                edition_search = requests.get(
+                    "https://openlibrary.org/search.json",
+                    params={
+                        'q': f'key:/works/{book_id}',
+                        'fields': 'number_of_pages,key',
+                        'limit': 1
+                    },
+                    timeout=OPENLIB_TIMEOUT
+                )
 
-            if edition_search.ok:
-                edition_data = edition_search.json()
-                if edition_data.get('docs'):
-                    work_data['number_of_pages'] = edition_data['docs'][0].get('number_of_pages')
+                if edition_search.ok:
+                    edition_data = edition_search.json()
+                    if edition_data.get('docs'):
+                        work_data['number_of_pages'] = edition_data['docs'][0].get('number_of_pages')
 
-            return work_data
-        except Exception as e:
+                return work_data
+            except requests.exceptions.Timeout:
+                    print(f"Timeout on attempt {attempt + 1}")
+                    if attempt == MAX_RETRIES - 1:
+                        return None
+                    time.sleep(2 ** attempt)
+            except Exception as e:
+                 print(f"Error on attempt {attempt + 1}: {str(e)}")
+                    if attempt == MAX_RETRIES - 1:
+                        return None
+                    time.sleep(2 ** attempt)
+
+        return None
+     except Exception as e:
             print(f"Error fetching book details: {str(e)}")
             return None
 
@@ -327,7 +354,7 @@ class BookRecommender:
                 print("Rate limit reached, falling back to basic generation")
                 return None
 
-            max_retries = 3
+            max_retries = 5
             for attempt in range(max_retries):
                 try:
                     print(f"Making Groq API call, attempt {attempt + 1}")
@@ -342,7 +369,7 @@ class BookRecommender:
                         model="llama3-8b-8192",
                         temperature=0.7,
                         max_tokens=max_tokens,
-                        timeout=600  # 150 second timeout
+                        timeout=GROQ_TIMEOUT  # 150 second timeout
                     )
 
                     response_time = time.time() - start_time
@@ -358,7 +385,9 @@ class BookRecommender:
                 except Exception as e:
                     print(f"Groq API attempt {attempt + 1} failed: {str(e)}")
                     if attempt < max_retries - 1:
-                        time.sleep(2 ** attempt)  # Exponential backoff
+                        sleep_time = 10 * (2 ** attempt)  # Longer wait between retries
+                        print(f"Waiting {sleep_time} seconds before retry")
+                        time.sleep(sleep_time)
                     else:
                         print("All retries failed")
                         return None
@@ -454,7 +483,7 @@ def get_recommendations():
                 response = requests.get(
                     OPEN_LIBRARY_SEARCH,
                     params={'q': title, 'fields': 'key,title,author_name,first_publish_year,subject,cover_i', 'limit': 1},
-                    timeout=600
+                    timeout=OPENLIB_TIMEOUT
                 )
 
                 if not response.ok:
