@@ -15,11 +15,15 @@ from flask_cors import CORS
 load_dotenv()
 
 app = Flask(__name__)
+app = Flask(__name__)
 CORS(app, resources={
     r"/api/*": {
         "origins": ["https://lemon-water-065707a1e.4.azurestaticapps.net"],
-        "methods": ["POST", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Accept"]
+        "methods": ["GET", "POST", "OPTIONS"],  # Added GET and OPTIONS
+        "allow_headers": ["Content-Type", "Accept", "Authorization"],  # Added Authorization
+        "expose_headers": ["Content-Type"],
+        "supports_credentials": True,
+        "max_age": 600  # Cache preflight requests for 10 minutes
     }
 })
 
@@ -44,10 +48,6 @@ def home():
 def test_endpoint():
     return jsonify({"message": "hello"})
 
-# Remove or comment out this after_request if relying solely on Flask-CORS
-# @app.after_request
-# def after_request(response):
-#     return response
 
 class RateLimiter:
     def __init__(self, requests_per_day: int, tokens_per_minute: int):
@@ -130,56 +130,56 @@ class BookRecommender:
             return None
 
     def get_book_details(self, book_id: str) -> Dict[str, Any]:
-    try:
-        print(f"Fetching details for book ID: {book_id}")
-        for attempt in range(MAX_RETRIES):
-            try:
-                work_response = requests.get(
-                    f"{OPEN_LIBRARY_WORKS}{book_id}.json",
-                    timeout=OPENLIB_TIMEOUT                        
-                )
-                if not work_response.ok:
-                    print(f"Failed to fetch book details: {work_response.status_code}")
-                    print(f"Response content: {work_response.text}")
-                    if attempt < MAX_RETRIES - 1:
-                        time.sleep(2 ** attempt)
-                        continue
-                    return None
+        try:
+            print(f"Fetching details for book ID: {book_id}")
+            for attempt in range(MAX_RETRIES):
+                try:
+                    work_response = requests.get(
+                        f"{OPEN_LIBRARY_WORKS}{book_id}.json",
+                        timeout=OPENLIB_TIMEOUT                        
+                    )
+                    if not work_response.ok:
+                        print(f"Failed to fetch book details: {work_response.status_code}")
+                        print(f"Response content: {work_response.text}")
+                        if attempt < MAX_RETRIES - 1:
+                            time.sleep(2 ** attempt)
+                            continue
+                        return None
 
-                work_data = work_response.json()
+                    work_data = work_response.json()
 
-                edition_search = requests.get(
-                    "https://openlibrary.org/search.json",
-                    params={
-                        'q': f'key:/works/{book_id}',
-                        'fields': 'number_of_pages,key',
-                        'limit': 1
-                    },
-                    timeout=OPENLIB_TIMEOUT
-                )
+                    edition_search = requests.get(
+                        "https://openlibrary.org/search.json",
+                        params={
+                            'q': f'key:/works/{book_id}',
+                            'fields': 'number_of_pages,key',
+                            'limit': 1
+                        },
+                        timeout=OPENLIB_TIMEOUT
+                    )
 
-                if edition_search.ok:
-                    edition_data = edition_search.json()
-                    if edition_data.get('docs'):
-                        work_data['number_of_pages'] = edition_data['docs'][0].get('number_of_pages')
+                    if edition_search.ok:
+                        edition_data = edition_search.json()
+                        if edition_data.get('docs'):
+                            work_data['number_of_pages'] = edition_data['docs'][0].get('number_of_pages')
 
-                return work_data
+                    return work_data
 
-            except requests.exceptions.Timeout:
-                print(f"Timeout on attempt {attempt + 1}")
-                if attempt == MAX_RETRIES - 1:
-                    return None
-                time.sleep(2 ** attempt)
-            except Exception as e:
-                print(f"Error on attempt {attempt + 1}: {str(e)}")
-                if attempt == MAX_RETRIES - 1:
-                    return None
-                time.sleep(2 ** attempt)
-                
-        return None
-    except Exception as e:
-        print(f"Error fetching book details: {str(e)}")
-        return None
+                except requests.exceptions.Timeout:
+                    print(f"Timeout on attempt {attempt + 1}")
+                    if attempt == MAX_RETRIES - 1:
+                        return None
+                    time.sleep(2 ** attempt)
+                except Exception as e:
+                    print(f"Error on attempt {attempt + 1}: {str(e)}")
+                    if attempt == MAX_RETRIES - 1:
+                        return None
+                    time.sleep(2 ** attempt)
+                    
+            return None
+        except Exception as e:
+            print(f"Error fetching book details: {str(e)}")
+            return None
 
     def calculate_reading_time(self, page_count: Optional[int], genres: Optional[List[str]] = None) -> dict:
         """
@@ -461,8 +461,15 @@ class BookRecommender:
 
 recommender = BookRecommender()
 
-@app.route('/api/recommend', methods=['POST'])
+@app.route('/api/recommend', methods=['POST', 'OPTIONS'])  
 def get_recommendations():
+        # Handle preflight request
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
+        response.headers.add('Access-Control-Allow-Origin', 'https://lemon-water-065707a1e.4.azurestaticapps.net')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+        response.headers.add('Access-Control-Allow-Methods', 'POST,OPTIONS')
+        return response
     try:
         print("Received recommendation request")
         data = request.json
