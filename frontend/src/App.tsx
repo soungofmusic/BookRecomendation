@@ -5,7 +5,6 @@ import { Alert, AlertDescription } from './components/Alert';
 import confetti from 'canvas-confetti';
 import AnimatedBook from './components/AnimatedBook';
 import ThemeToggle from './components/ThemeToggle';
-import { ThemeProvider } from './contexts/ThemeContext';
 
 interface Book {
   id: string;
@@ -165,7 +164,6 @@ function App() {
   };
 
   return (
-    <ThemeProvider>
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-gray-900 dark:to-gray-800 transition-colors duration-200">
         <ThemeToggle />
         <div className="container mx-auto py-12 px-4">
@@ -242,7 +240,6 @@ function App() {
           </footer>
         </div>
       </div>
-    </ThemeProvider>
   );
 }
 
