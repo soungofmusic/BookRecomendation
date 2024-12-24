@@ -55,6 +55,11 @@ function App() {
     if (elapsedTime < 40) return "Reading through countless stories...";
     if (elapsedTime < 60) return "Matching literary patterns...";
     if (elapsedTime < 90) return "Writing your next chapter...";
+    if (elapsedTime < 120) return "Analyzing writing styles...";
+    if (elapsedTime < 150) return "Finding perfect matches...";
+    if (elapsedTime < 180) return "Polishing recommendations...";
+    if (elapsedTime < 210) return "Crafting detailed insights...";
+    if (elapsedTime < 240) return "Adding final touches...";
     return "Carefully curating your recommendations...";
   };
 
@@ -81,7 +86,7 @@ function App() {
         
         // Add signal to allow timeout/cancellation
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 600000); // 10 minutes timeout
+        const timeoutId = setTimeout(() => controller.abort(), 900000); // 15 minutes timeout
 
         const response = await fetch('https://book-recommender-api-affpgxcqgah8cvah.westus-01.azurewebsites.net/api/recommend', {
           method: 'POST',
@@ -117,14 +122,14 @@ function App() {
         }
 
         if (data.recommendations?.length) {
-          // Delay setting recommendations slightly to allow for smooth transition
+          // Longer delay for setting recommendations
           setTimeout(() => {
             setRecommendations([
               data.recommendations[0] || null,
               data.recommendations[1] || null
             ]);
             triggerConfetti();
-          }, 2000);
+          }, 3000);
         } else {
           setError("We couldn't find matching recommendations. Please try different books.");
           setRecommendations([null, null]);
@@ -134,7 +139,7 @@ function App() {
         setTimeout(() => {
           setIsLoading(false);
           setLoadingMessage("");
-        }, 1000);
+        }, 2000);
         setRetryCount(0);
 
       } catch (error) {
@@ -149,7 +154,8 @@ function App() {
           setRetryCount(attempt + 1);
           setError('Reconnecting to our library...');
           setLoadingMessage("Retrying connection...");
-          await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+          // Increased exponential backoff
+          await new Promise(resolve => setTimeout(resolve, Math.pow(3, attempt) * 2000));
           return makeRequest(attempt + 1);
         }
         
