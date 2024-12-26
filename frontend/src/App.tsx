@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import BookInput from './components/BookInput';
 import Recommendations from './components/Recommendations';
 import { Alert, AlertDescription } from './components/Alert';
@@ -18,30 +18,43 @@ interface Book {
   why_read?: string;
 }
 
-const triggerConfetti = () => {
-  confetti({
-    particleCount: 100,
-    spread: 70,
-    origin: { y: 0.6 },
-    colors: ['#3B82F6', '#6366F1', '#A855F7'],
-  });
-
-  setTimeout(() => {
-    confetti({
-      particleCount: 50,
-      spread: 50,
-      origin: { y: 0.65 },
-      colors: ['#3B82F6', '#6366F1', '#A855F7'],
-    });
-  }, 200);
-};
-
 function App() {
   const [recommendations, setRecommendations] = useState<(Book | null)[]>([null, null]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [loadingMessage, setLoadingMessage] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
+
+  // Handle mobile viewport height
+  useEffect(() => {
+    const setVH = () => {
+      const vh = window.innerHeight * 0.01;
+      document.documentElement.style.setProperty('--vh', `${vh}px`);
+    };
+
+    setVH();
+    window.addEventListener('resize', setVH);
+    return () => window.removeEventListener('resize', setVH);
+  }, []);
+
+  const triggerConfetti = () => {
+    const isMobile = window.innerWidth < 768;
+    confetti({
+      particleCount: isMobile ? 50 : 100,
+      spread: isMobile ? 50 : 70,
+      origin: { y: isMobile ? 0.5 : 0.6 },
+      colors: ['#3B82F6', '#6366F1', '#A855F7'],
+    });
+
+    setTimeout(() => {
+      confetti({
+        particleCount: isMobile ? 25 : 50,
+        spread: isMobile ? 40 : 50,
+        origin: { y: isMobile ? 0.55 : 0.65 },
+        colors: ['#3B82F6', '#6366F1', '#A855F7'],
+      });
+    }, 200);
+  };
   
   const getLoadingMessage = (elapsedTime: number) => {
     if (elapsedTime < 20) return "Opening your book collection...";
@@ -164,82 +177,98 @@ function App() {
   };
 
   return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-gray-900 dark:to-gray-800 transition-colors duration-200">
+    <div className="min-h-screen min-h-[calc(var(--vh,1vh)*100)] bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-gray-900 dark:to-gray-800 transition-colors duration-200">
+      {/* Theme Toggle - positioned differently for mobile and desktop */}
+      <div className="fixed bottom-4 right-4 md:top-4 md:bottom-auto z-50">
         <ThemeToggle />
-        <div className="container mx-auto py-12 px-4">
-          <div className="text-center mb-12">
-            <div className="flex items-center justify-center gap-4 mb-6">
-              <img 
-                src="/favicon.ico" 
-                alt="Read Next" 
-                className="w-16 h-16 md:w-20 md:h-20 transition-transform duration-300 hover:scale-105" 
-              />
-              <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 
-                           dark:from-blue-400 dark:to-indigo-400 text-transparent bg-clip-text">
-                Read Next
-              </h1>
-            </div>
-            <p className="text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
-              Share 5 books you love, and we'll find your perfect next reads
-            </p>
+      </div>
+
+      <div className="container mx-auto py-6 md:py-12 px-4 sm:px-6">
+        {/* Header Section */}
+        <div className="text-center mb-8 md:mb-12">
+          <div className="flex items-center justify-center gap-3 md:gap-4 mb-4 md:mb-6">
+            <img 
+              src="/favicon.ico" 
+              alt="Read Next" 
+              className="w-12 h-12 md:w-20 md:h-20 transition-transform duration-300 hover:scale-105" 
+            />
+            <h1 className="text-3xl md:text-5xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 
+                         dark:from-blue-400 dark:to-indigo-400 text-transparent bg-clip-text">
+              Read Next
+            </h1>
           </div>
+          <p className="text-gray-600 dark:text-gray-300 max-w-2xl mx-auto text-sm md:text-base">
+            Share 5 books you love, and we'll find your perfect next reads
+          </p>
+        </div>
 
-          {error && (
-            <Alert variant="destructive" className="mb-8 animate-fadeIn">
-              <AlertDescription>
-                {error}
-                {retryCount > 0 && (
-                  <div className="mt-1">
-                    Retry attempt {retryCount} of 3...
-                  </div>
-                )}
-              </AlertDescription>
-            </Alert>
-          )}
-
-          <div className="max-w-4xl mx-auto">
-            <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-xl shadow-xl p-6 mb-8 transition-all duration-300 hover:shadow-2xl">
-              <div className="mb-6">
-                <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-100 mb-2">
-                  Your Favorite Books
-                </h2>
-                <p className="text-gray-600 dark:text-gray-400 text-sm">
-                  Enter 5 books you've enjoyed to get personalized recommendations
-                </p>
-              </div>
-              
-              <BookInput
-                onSubmit={handleBookSubmit}
-                isLoading={isLoading}
-              />
-
-              {isLoading && loadingMessage && (
-                <div className="mt-8 space-y-4 transition-all duration-500 transform animate-fadeInScale">
-                  <div className="animate-bookBounce">
-                    <AnimatedBook />
-                  </div>
-                  <div className="text-center text-gray-600 dark:text-gray-400 transition-opacity">
-                    <span className="animate-slideUp inline-block">
-                      {loadingMessage}
-                    </span>
-                  </div>
+        {/* Error Alert */}
+        {error && (
+          <Alert variant="destructive" className="mb-6 md:mb-8 animate-fadeIn max-w-4xl mx-auto">
+            <AlertDescription className="text-sm">
+              {error}
+              {retryCount > 0 && (
+                <div className="mt-1">
+                  Retry attempt {retryCount} of 3...
                 </div>
               )}
-            </div>
+            </AlertDescription>
+          </Alert>
+        )}
 
-            <div className={`mt-8 transition-all duration-500 ${!isLoading ? 'animate-fadeInScale' : 'opacity-0'}`}>
-              <Recommendations
-                recommendations={recommendations}
-                isLoading={isLoading}
-              />
+        {/* Main Content */}
+        <div className="max-w-4xl mx-auto">
+          {/* Input Section */}
+          <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-lg md:rounded-xl 
+                         shadow-lg md:shadow-xl p-4 md:p-6 mb-6 md:mb-8 
+                         transition-all duration-300 hover:shadow-xl md:hover:shadow-2xl">
+            <div className="mb-4 md:mb-6">
+              <h2 className="text-lg md:text-xl font-semibold text-gray-800 dark:text-gray-100 mb-2">
+                Your Favorite Books
+              </h2>
+              <p className="text-gray-600 dark:text-gray-400 text-xs md:text-sm">
+                Enter 5 books you've enjoyed to get personalized recommendations
+              </p>
             </div>
+            
+            <BookInput
+              onSubmit={handleBookSubmit}
+              isLoading={isLoading}
+            />
+
+            {/* Loading State */}
+            {isLoading && loadingMessage && (
+              <div className="mt-6 md:mt-8 space-y-3 md:space-y-4 
+                           transition-all duration-500 transform animate-fadeInScale">
+                <div className="animate-bookBounce max-w-[150px] md:max-w-[200px] mx-auto">
+                  <AnimatedBook />
+                </div>
+                <div className="text-center text-gray-600 dark:text-gray-400 transition-opacity">
+                  <span className="animate-slideUp inline-block text-sm md:text-base">
+                    {loadingMessage}
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
 
-          <footer className="mt-16 text-center text-gray-500 dark:text-gray-400 text-sm">
-            <p>Powered by Open Library API & Meta Llama</p>
-          </footer>
+          {/* Recommendations Section */}
+          <div className={`mt-6 md:mt-8 transition-all duration-500 
+                        ${!isLoading ? 'animate-fadeInScale' : 'opacity-0'}`}>
+            <Recommendations
+              recommendations={recommendations}
+              isLoading={isLoading}
+            />
+          </div>
         </div>
+
+        {/* Footer - extra bottom padding on mobile for theme toggle */}
+        <footer className="mt-12 md:mt-16 text-center text-gray-500 dark:text-gray-400 
+                        text-xs md:text-sm pb-20 md:pb-8">
+          <p>Powered by Open Library API & Meta Llama</p>
+        </footer>
       </div>
+    </div>
   );
 }
 

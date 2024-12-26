@@ -1,4 +1,4 @@
-// src/components/Alert.tsx
+// components/Alert.tsx
 import React from 'react';
 
 interface AlertProps {
@@ -7,24 +7,35 @@ interface AlertProps {
   className?: string;
 }
 
+interface AlertDescriptionProps {
+  children: React.ReactNode;
+  className?: string;
+}
+
 export const Alert: React.FC<AlertProps> = ({ 
-  variant = 'default',
-  children,
-  className = ''
+  children, 
+  className = '', 
+  variant = 'default' 
 }) => {
-  const baseStyles = "rounded-lg p-4 mb-4 text-sm";
-  const variantStyles = {
-    default: "bg-blue-100 text-blue-800 border border-blue-200",
-    destructive: "bg-red-100 text-red-800 border border-red-200"
-  };
+  const baseStyles = "relative w-full rounded-lg border p-4";
+  const variantStyles = variant === 'destructive' 
+    ? "border-red-500/50 bg-red-50 text-red-700 dark:border-red-500/30 dark:bg-red-900/30 dark:text-red-200"
+    : "border-gray-200 dark:border-gray-800";
 
   return (
-    <div className={`${baseStyles} ${variantStyles[variant]} ${className}`} role="alert">
+    <div className={`${baseStyles} ${variantStyles} ${className}`}>
       {children}
     </div>
   );
 };
 
-export const AlertDescription: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  return <div className="font-medium">{children}</div>;
+export const AlertDescription: React.FC<AlertDescriptionProps> = ({ 
+  children,
+  className = ''
+}) => {
+  return (
+    <div className={`text-sm ${className}`}>
+      {children}
+    </div>
+  );
 };
