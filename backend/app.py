@@ -33,8 +33,8 @@ OPEN_LIBRARY_WORKS = "https://openlibrary.org/works/"
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 # Timeout settings
-OPENLIB_TIMEOUT = 30        # Timeout for OpenLibrary API calls
-REQUEST_TIMEOUT = 20        # Timeout for individual request operations
+OPENLIB_TIMEOUT = 1000       # Timeout for OpenLibrary API calls
+REQUEST_TIMEOUT = 1000       # Timeout for individual request operations
 OVERALL_TIMEOUT = 540      # Overall timeout for the entire recommendation process (9 minutes)
 
 # Request limits
