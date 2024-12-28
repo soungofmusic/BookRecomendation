@@ -453,120 +453,128 @@ def get_recommendations():
 
         try:
             input_books, input_book_ids, input_authors = recommender.process_input_books(book_titles)
-            if time.time() - start_time > 180:  # 3 minute check
-                return jsonify({'error': 'Book processing took too long. Please try with fewer books.'}), 408
         except Exception as e:
             print(f"Error processing input books: {str(e)}")
             return jsonify({'error': 'Failed to process input books. Please try again.'}), 500
 
         if not input_books:
-            return jsonify({'error': 'Could not process any of the input books'}), 400
+            return jsonify({'error': 'Could not find any of the specified books. Please check the titles and try again.'}), 400
 
-        # Analyze subjects
+        # Analyze subjects with broader matching
         all_subjects = []
         for book in input_books:
+            # Get both subjects and direct genres
             subjects = book.get('subjects', [])
-            all_subjects.extend(subjects)
+            if isinstance(subjects, list):
+                all_subjects.extend(subjects)
+            
+            # Add broader genre categories
+            genres = set()
+            for subject in subjects:
+                subject_lower = subject.lower()
+                if 'fiction' in subject_lower:
+                    genres.add('Fiction')
+                elif 'non-fiction' in subject_lower or 'nonfiction' in subject_lower:
+                    genres.add('Non-Fiction')
+                for genre in ['Mystery', 'Science Fiction', 'Fantasy', 'Romance', 'Thriller', 'Horror']:
+                    if genre.lower() in subject_lower:
+                        genres.add(genre)
+            all_subjects.extend(list(genres))
 
-        common_subjects = Counter(all_subjects).most_common(10)
+        # Get both specific and general subjects
+        common_subjects = Counter(all_subjects).most_common(15)  # Increased from 10
         recommendations = []
         seen_books = set()
 
-        # Find recommendations
-        for subject, _ in common_subjects:
-            # Check timeout before processing each subject
-            elapsed_time = time.time() - start_time
-            if elapsed_time > 540:  # 9 minute threshold
-                if recommendations:
-                    filtered_recommendations = apply_filters(recommendations, filters)
-                    final_recommendations = sorted(
-                        filtered_recommendations,
-                        key=lambda x: x['similarity_score'],
-                        reverse=True
-                    )[:2]
-                    return jsonify({
-                        'status': 'partial',
-                        'recommendations': final_recommendations,
-                        'message': 'Request took too long, returning partial results'
-                    })
-                else:
-                    return jsonify({'error': 'Processing timeout. Please try with fewer books.'}), 408
+        # Track progress for better error messages
+        searched_subjects = []
+        found_any_matches = False
 
-            try:
-                response = requests.get(
-                    OPEN_LIBRARY_SEARCH,
-                    params={
-                        'q': f'subject:{subject}',
-                        'fields': 'key,title,author_name,first_publish_year,subject,cover_i',
-                        'limit': 10  # Reduced from 20
-                    },
-                    timeout=10  # Short timeout
-                )
-
-                if response.ok:
-                    for book in response.json().get('docs', []):
-                        # Check timeout inside book loop
-                        if time.time() - start_time > 540:  # 9 minute threshold
-                            break
-
-                        book_id = book.get('key', '').split('/')[-1]
-                        author = book.get('author_name', ['Unknown'])[0] if book.get('author_name') else 'Unknown'
-
-                        if (book_id not in input_book_ids and 
-                            book_id not in seen_books and 
-                            author not in input_authors):
-                            
-                            book_details = recommender.get_book_details(book_id)
-                            if book_details:
-                                similarity_score = recommender.calculate_similarity_score(book_details, input_books)
-                                # Skip low similarity scores
-                                if similarity_score * 100 < 30:  # 30% threshold
-                                    continue
-                                    
-                                reading_level = recommender.determine_reading_level(book_details)
-                                narrative_style = recommender.analyze_narrative_style(book_details)
-                                
-                                # Try AI explanation with timeout
-                                try:
-                                    explanation = recommender.generate_similarity_explanation_with_ai(
-                                        book_details, input_books, similarity_score * 100
-                                    )
-                                except Exception as e:
-                                    print(f"AI explanation failed: {str(e)}")
-                                    explanation = recommender.generate_fallback_explanation(
-                                        book_details, input_books, similarity_score * 100
-                                    )
-
-                                recommendation = {
-                                    'id': book_id,
-                                    'title': book.get('title', ''),
-                                    'author': author,
-                                    'year': book.get('first_publish_year'),
-                                    'genres': book.get('subject', [])[:5] if book.get('subject') else [],
-                                    'similarity_score': round(similarity_score * 100, 1),
-                                    'reading_level': reading_level,
-                                    'narrative_style': narrative_style,
-                                    'explanation': explanation,
-                                    'cover_url': f"https://covers.openlibrary.org/b/id/{book.get('cover_i')}-L.jpg" if book.get('cover_i') else None,
-                                }
-
-                                recommendations.append(recommendation)
-                                seen_books.add(book_id)
-                                
-                                # Check if we have enough recommendations
-                                if len(recommendations) >= 10:  # Get more than needed for filtering
-                                    break
-
-            except requests.exceptions.Timeout:
-                print(f"Timeout while searching for subject: {subject}")
-                continue
-            except Exception as e:
-                print(f"Error processing subject {subject}: {str(e)}")
-                continue
+        # Find recommendations with multiple attempts
+        for attempt in range(2):  # Two attempts with different criteria
+            min_similarity = 20 if attempt == 1 else 30  # Lower threshold on second attempt
             
-            # Return early if we have enough recommendations
-            if len(recommendations) >= 10:
-                break
+            for subject, _ in common_subjects:
+                searched_subjects.append(subject)
+                try:
+                    # Try both exact and broader subject searches
+                    search_queries = [
+                        f'subject:"{subject}"',
+                        subject  # Broader search without exact matching
+                    ]
+                    
+                    for query in search_queries:
+                        response = requests.get(
+                            OPEN_LIBRARY_SEARCH,
+                            params={
+                                'q': query,
+                                'fields': 'key,title,author_name,first_publish_year,subject,cover_i',
+                                'limit': 15
+                            },
+                            timeout=10
+                        )
+
+                        if response.ok:
+                            for book in response.json().get('docs', []):
+                                book_id = book.get('key', '').split('/')[-1]
+                                author = book.get('author_name', ['Unknown'])[0] if book.get('author_name') else 'Unknown'
+
+                                if (book_id not in input_book_ids and 
+                                    book_id not in seen_books and 
+                                    author not in input_authors):
+                                    
+                                    book_details = recommender.get_book_details(book_id)
+                                    if book_details:
+                                        similarity_score = recommender.calculate_similarity_score(book_details, input_books)
+                                        
+                                        # Use lower similarity threshold on second attempt
+                                        if similarity_score * 100 >= min_similarity:
+                                            found_any_matches = True
+                                            reading_level = recommender.determine_reading_level(book_details)
+                                            narrative_style = recommender.analyze_narrative_style(book_details)
+                                            
+                                            try:
+                                                explanation = recommender.generate_similarity_explanation_with_ai(
+                                                    book_details, input_books, similarity_score * 100
+                                                )
+                                            except Exception:
+                                                explanation = recommender.generate_fallback_explanation(
+                                                    book_details, input_books, similarity_score * 100
+                                                )
+
+                                            recommendation = {
+                                                'id': book_id,
+                                                'title': book.get('title', ''),
+                                                'author': author,
+                                                'year': book.get('first_publish_year'),
+                                                'genres': book.get('subject', [])[:5] if book.get('subject') else [],
+                                                'similarity_score': round(similarity_score * 100, 1),
+                                                'reading_level': reading_level,
+                                                'narrative_style': narrative_style,
+                                                'explanation': explanation,
+                                                'cover_url': f"https://covers.openlibrary.org/b/id/{book.get('cover_i')}-L.jpg" if book.get('cover_i') else None,
+                                            }
+
+                                            recommendations.append(recommendation)
+                                            seen_books.add(book_id)
+
+                except Exception as e:
+                    print(f"Error processing subject {subject}: {str(e)}")
+                    continue
+
+                if len(recommendations) >= 10:
+                    break
+            
+            if recommendations:
+                break  # Exit attempts loop if we found recommendations
+
+        if not recommendations:
+            error_message = "We couldn't find matching recommendations. "
+            if searched_subjects:
+                error_message += f"We searched for books similar to yours in these categories: {', '.join(searched_subjects[:5])}"
+            if not found_any_matches:
+                error_message += ". Try books with more common genres or more recent publications."
+            return jsonify({'error': error_message}), 404
 
         # Filter and sort recommendations
         filtered_recommendations = apply_filters(recommendations, filters)
@@ -574,10 +582,10 @@ def get_recommendations():
             filtered_recommendations,
             key=lambda x: x['similarity_score'],
             reverse=True
-        )[:2]  # Return top 2 recommendations
+        )[:2]
 
+        # If filters removed all recommendations, return top unfiltered ones
         if not final_recommendations and recommendations:
-            # If filtering removed all recommendations, return top 2 unfiltered
             final_recommendations = sorted(
                 recommendations,
                 key=lambda x: x['similarity_score'],
