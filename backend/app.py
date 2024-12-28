@@ -27,30 +27,41 @@ CORS(app, resources={
     }
 })
 
-# Configuration
-OPEN_LIBRARY_SEARCH = "https://openlibrary.org/search.json"
-OPEN_LIBRARY_WORKS = "https://openlibrary.org/works/"
+# --------------------------------------------------------------------------------
+#                               Configuration
+# --------------------------------------------------------------------------------
+OPEN_LIBRARY_SEARCH = "https://openlibrary.org/search.json"        # Book Search API
+OPEN_LIBRARY_WORKS = "https://openlibrary.org/works/"              # Work API
+OPEN_LIBRARY_EDITIONS = "https://openlibrary.org/books/"           # Edition API (e.g. /books/OL1M.json)
+OPEN_LIBRARY_AUTHORS = "https://openlibrary.org/authors/"          # Authors API
+OPEN_LIBRARY_SUBJECTS = "https://openlibrary.org/subjects/"        # Subjects API
+OPEN_LIBRARY_COVERS = "https://covers.openlibrary.org"             # Covers API
+OPEN_LIBRARY_RECENT_CHANGES = "https://openlibrary.org/recentchanges"  # Recent Changes API
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 # Timeout settings
-OPENLIB_TIMEOUT = 1000       # Timeout for OpenLibrary API calls
-REQUEST_TIMEOUT = 1000       # Timeout for individual request operations
-OVERALL_TIMEOUT = 540      # Overall timeout for the entire recommendation process (9 minutes)
+OPENLIB_TIMEOUT = 1000      # Timeout for OpenLibrary API calls
+REQUEST_TIMEOUT = 1000      # Timeout for individual request operations
+OVERALL_TIMEOUT = 540       # Overall timeout for the entire recommendation process (9 minutes)
 
 # Request limits
-MAX_RETRIES = 2            # Reduced from 3
+MAX_RETRIES = 2             # Reduced from 3
 CONCURRENT_REQUESTS = 3     # Number of concurrent requests
 MAX_BOOKS_PER_REQUEST = 5   # Maximum number of input books
 MAX_RECOMMENDATIONS_PER_SUBJECT = 10  # Maximum recommendations per subject
 
 # Processing settings
-BATCH_SIZE = 5             # Process books in batches
-MIN_SIMILARITY_SCORE = 5   # Minimum similarity score threshold
+BATCH_SIZE = 5              # Process books in batches
+MIN_SIMILARITY_SCORE = 5    # Minimum similarity score threshold
 
 HEADERS = {
     "User-Agent": "ReadNext/1.0 (oungs@oregonstate.edu)"
 }
 
+
+# --------------------------------------------------------------------------------
+#                               RateLimiter + Cache
+# --------------------------------------------------------------------------------
 
 class RateLimiter:
     def __init__(self, requests_per_day: int, tokens_per_minute: int):
@@ -65,9 +76,11 @@ class RateLimiter:
     def can_make_request(self, estimated_tokens: int) -> bool:
         with self.lock:
             current_time = datetime.now()
+            # reset daily count if 24h passed
             if current_time - self.last_reset > timedelta(days=1):
                 self.daily_requests = 0
                 self.last_reset = current_time
+            # reset minute count if 1 minute passed
             if current_time - self.minute_reset > timedelta(minutes=1):
                 self.minute_tokens = 0
                 self.minute_reset = current_time
@@ -101,7 +114,16 @@ class Cache:
                 'timestamp': datetime.now()
             }
 
+
+# --------------------------------------------------------------------------------
+#                              Utility Functions
+# --------------------------------------------------------------------------------
+
 def apply_filters(recommendations: List[Dict], filters: Dict) -> List[Dict]:
+    """
+    Applies user-specified filters (genre, yearRange, minScore, readingLevel)
+    to the recommendation list.
+    """
     if not filters or not recommendations:
         return recommendations
 
@@ -131,6 +153,11 @@ def apply_filters(recommendations: List[Dict], filters: Dict) -> List[Dict]:
 
     return filtered_books
 
+
+# --------------------------------------------------------------------------------
+#                       Book Recommender (Your Existing Logic)
+# --------------------------------------------------------------------------------
+
 class BookRecommender:
     def __init__(self):
         self.rate_limiter = RateLimiter(14400, 20000)
@@ -145,7 +172,6 @@ class BookRecommender:
             print(f"Warning: Could not initialize Groq client: {e}")
             self.groq_client = None
 
-
     def extract_year(self, date_str: str) -> Optional[int]:
         if not date_str:
             return None
@@ -159,6 +185,10 @@ class BookRecommender:
             return None
 
     def get_book_details(self, book_id: str) -> Optional[Dict]:
+        """
+        Retrieve work details from the /works/ API by the given work ID.
+        Caches results to avoid repeated calls.
+        """
         try:
             cached_data = self.cache.get(book_id)
             if cached_data:
@@ -166,7 +196,7 @@ class BookRecommender:
 
             for attempt in range(MAX_RETRIES):
                 try:
-                    work_response = self.session.get(  # Using session with headers
+                    work_response = self.session.get(
                         f"{OPEN_LIBRARY_WORKS}{book_id}.json",
                         timeout=OPENLIB_TIMEOUT
                     )
@@ -199,8 +229,12 @@ class BookRecommender:
         except Exception as e:
             print(f"Unexpected error for book {book_id}: {str(e)}")
             return None
-        
+
     def calculate_similarity_score(self, candidate_book: Dict, input_books: List[Dict]) -> float:
+        """
+        Calculates a simple similarity score between candidate_book and input_books,
+        based on subject overlap, publication year closeness, etc.
+        """
         weights = {
             'subject_match': 0.5,
             'year_match': 0.25,
@@ -261,11 +295,11 @@ class BookRecommender:
             weights['popularity_match'] * popularity_similarity
         )
         
+        # Slight bonus if it has an average rating above 4.0
         if candidate_book.get('average_rating', 0) > 4.0:
             score *= 1.1
 
         return min(score, 1.0)
-
 
     def determine_reading_level(self, book: Dict) -> str:
         subjects = set(s.lower() for s in book.get('subjects', []))
@@ -345,6 +379,9 @@ class BookRecommender:
         return response.strip() if response else self.generate_fallback_explanation(book, input_books, similarity_score)
 
     def generate_fallback_explanation(self, book: Dict, input_books: List[Dict], similarity_score: float) -> str:
+        """
+        If the LLM is unavailable, generate a basic explanation.
+        """
         reading_level = self.determine_reading_level(book)
         narrative_style = self.analyze_narrative_style(book)
         shared_subjects = set(book.get('subjects', [])) & set(sum([b.get('subjects', []) for b in input_books], []))
@@ -355,7 +392,7 @@ class BookRecommender:
             shared_genres = list(shared_subjects)[:2]
             explanation_parts.append(f"matches your interest in {' and '.join(shared_genres)}")
 
-        if reading_level == self.determine_reading_level(input_books[0]):
+        if input_books and reading_level == self.determine_reading_level(input_books[0]):
             explanation_parts.append(f"offers a similar reading experience at the {reading_level} level")
 
         book_year = self.extract_year(book.get('first_publish_date', ''))
@@ -378,13 +415,20 @@ class BookRecommender:
         return f"This book has a {similarity_score:.1f}% match with your reading preferences."
 
     def process_input_books(self, book_titles: List[str]) -> Tuple[List[Dict], set, set]:
+        """
+        1) Search for each title using /search.json
+        2) Take the first doc
+        3) Extract the 'key' -> /works/<ID>
+        4) Get the work details
+        """
         input_books = []
         input_book_ids = set()
         input_authors = set()
 
         def process_single_book(title):
             try:
-                response = self.session.get(  # Using session with headers
+                # Basic search using /search.json
+                response = self.session.get(
                     OPEN_LIBRARY_SEARCH,
                     params={'q': title, 'fields': 'key,title,author_name,first_publish_year,subject,cover_i', 'limit': 1},
                     timeout=OPENLIB_TIMEOUT
@@ -400,9 +444,13 @@ class BookRecommender:
                     return None
 
                 book = docs[0]
-                book_id = book.get('key', '').split('/')[-1]
+                book_id = book.get('key', '').split('/')[-1]  # e.g. "OL1234M"
                 author = book.get('author_name', ['Unknown'])[0] if book.get('author_name') else 'Unknown'
                 
+                # Our function expects a "work id," but we only have the edition key here (OLxxxM).
+                # If we want the "work" key, we'd do another fetch or parse an edition details endpoint.
+                # For simplicity, let's assume the edition key is the same "id" we pass to get_book_details
+                # or you might do another call to /books/OLxxxM.json to find .works[0].key
                 book_details = self.get_book_details(book_id)
                 if book_details:
                     return {
@@ -416,7 +464,6 @@ class BookRecommender:
                 print(f"Error processing book {title}: {str(e)}")
                 return None
 
-        # Process books concurrently with timeout
         futures = []
         with ThreadPoolExecutor(max_workers=CONCURRENT_REQUESTS) as executor:
             futures = [executor.submit(process_single_book, title) for title in book_titles]
@@ -437,7 +484,10 @@ class BookRecommender:
 
         return input_books, input_book_ids, input_authors
 
-# Initialize recommender
+
+# --------------------------------------------------------------------------------
+#                          Initialize Recommender
+# --------------------------------------------------------------------------------
 recommender = BookRecommender()
 
 @app.route('/')
@@ -447,6 +497,11 @@ def home():
 @app.route('/test', methods=['GET'])
 def test_endpoint():
     return jsonify({"message": "hello"})
+
+
+# --------------------------------------------------------------------------------
+#                 Existing Recommendation Endpoint (unchanged)
+# --------------------------------------------------------------------------------
 
 @app.route('/api/recommend', methods=['POST', 'OPTIONS'])
 def get_recommendations():
@@ -480,7 +535,6 @@ def get_recommendations():
         # Analyze subjects with broader matching
         all_subjects = []
         for book in input_books:
-            # Get both subjects and direct genres
             subjects = book.get('subjects', [])
             if isinstance(subjects, list):
                 all_subjects.extend(subjects)
@@ -493,31 +547,28 @@ def get_recommendations():
                     genres.add('Fiction')
                 elif 'non-fiction' in subject_lower or 'nonfiction' in subject_lower:
                     genres.add('Non-Fiction')
-                for genre in ['Mystery', 'Science Fiction', 'Fantasy', 'Romance', 'Thriller', 'Horror']:
-                    if genre.lower() in subject_lower:
-                        genres.add(genre)
+                for g in ['Mystery', 'Science Fiction', 'Fantasy', 'Romance', 'Thriller', 'Horror']:
+                    if g.lower() in subject_lower:
+                        genres.add(g)
             all_subjects.extend(list(genres))
 
-        # Get both specific and general subjects
-        common_subjects = Counter(all_subjects).most_common(15)  # Increased from 10
+        common_subjects = Counter(all_subjects).most_common(15)  # (from 10 to 15)
         recommendations = []
         seen_books = set()
-
-        # Track progress for better error messages
         searched_subjects = []
         found_any_matches = False
 
-        # Find recommendations with multiple attempts
-        for attempt in range(2):  # Two attempts with different criteria
-            min_similarity = 20 if attempt == 1 else 30  # Lower threshold on second attempt
+        # Attempt #1 with higher threshold, #2 with lower threshold
+        for attempt in range(2):
+            min_similarity = 20 if attempt == 1 else 30
             
             for subject, _ in common_subjects:
                 searched_subjects.append(subject)
                 try:
-                    # Try both exact and broader subject searches
+                    # We do a broad search with or without quotes
                     search_queries = [
                         f'subject:"{subject}"',
-                        subject  # Broader search without exact matching
+                        subject
                     ]
                     
                     for query in search_queries:
@@ -544,7 +595,6 @@ def get_recommendations():
                                     if book_details:
                                         similarity_score = recommender.calculate_similarity_score(book_details, input_books)
                                         
-                                        # Use lower similarity threshold on second attempt
                                         if similarity_score * 100 >= min_similarity:
                                             found_any_matches = True
                                             reading_level = recommender.determine_reading_level(book_details)
@@ -569,9 +619,9 @@ def get_recommendations():
                                                 'reading_level': reading_level,
                                                 'narrative_style': narrative_style,
                                                 'explanation': explanation,
-                                                'cover_url': f"https://covers.openlibrary.org/b/id/{book.get('cover_i')}-L.jpg" if book.get('cover_i') else None,
+                                                'cover_url': (f"https://covers.openlibrary.org/b/id/{book.get('cover_i')}-L.jpg"
+                                                              if book.get('cover_i') else None),
                                             }
-
                                             recommendations.append(recommendation)
                                             seen_books.add(book_id)
 
@@ -583,12 +633,12 @@ def get_recommendations():
                     break
             
             if recommendations:
-                break  # Exit attempts loop if we found recommendations
+                break
 
         if not recommendations:
             error_message = "We couldn't find matching recommendations. "
             if searched_subjects:
-                error_message += f"We searched for books similar to yours in these categories: {', '.join(searched_subjects[:5])}"
+                error_message += f"We searched for books in these categories: {', '.join(searched_subjects[:5])}"
             if not found_any_matches:
                 error_message += ". Try books with more common genres or more recent publications."
             return jsonify({'error': error_message}), 404
@@ -601,7 +651,6 @@ def get_recommendations():
             reverse=True
         )[:2]
 
-        # If filters removed all recommendations, return top unfiltered ones
         if not final_recommendations and recommendations:
             final_recommendations = sorted(
                 recommendations,
@@ -618,6 +667,208 @@ def get_recommendations():
         print(f"Error generating recommendations: {str(e)}")
         return jsonify({'error': 'An unexpected error occurred. Please try again.'}), 500
 
+
+# --------------------------------------------------------------------------------
+#        Additional Example Endpoints for the "Index of APIs" (Stubs/Minimal)
+# --------------------------------------------------------------------------------
+
+# 1. Book Search API (You already use it, but here's a dedicated endpoint)
+@app.route('/api/search_books', methods=['GET'])
+def search_books():
+    """
+    Example: /api/search_books?q=tolkien&limit=5
+    """
+    query = request.args.get('q', '')
+    limit = request.args.get('limit', 5, type=int)
+    try:
+        resp = requests.get(
+            OPEN_LIBRARY_SEARCH,
+            params={'q': query, 'limit': limit},
+            timeout=10
+        )
+        if not resp.ok:
+            return jsonify({"error": "Search API request failed"}), 500
+        return jsonify(resp.json())  # returns the full search JSON
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# 2. Work & Edition APIs
+@app.route('/api/work/<work_id>', methods=['GET'])
+def get_work_details(work_id):
+    """
+    Example: /api/work/OL15626917W
+    """
+    try:
+        resp = requests.get(f"{OPEN_LIBRARY_WORKS}{work_id}.json", timeout=10)
+        if not resp.ok:
+            return jsonify({"error": f"Work {work_id} not found"}), resp.status_code
+        return jsonify(resp.json())
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/edition/<edition_id>', methods=['GET'])
+def get_edition_details(edition_id):
+    """
+    Example: /api/edition/OL1M
+    """
+    try:
+        resp = requests.get(f"{OPEN_LIBRARY_EDITIONS}{edition_id}.json", timeout=10)
+        if not resp.ok:
+            return jsonify({"error": f"Edition {edition_id} not found"}), resp.status_code
+        return jsonify(resp.json())
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# 3. My Books API (Stub - requires user login or external system)
+@app.route('/api/my_books', methods=['GET'])
+def my_books_stub():
+    """
+    Stub endpoint. In reality, you'd need auth to fetch a user's private reading log.
+    For demonstration, we return a mock response or call some user-based endpoint if available.
+    """
+    # Example of what might happen if you had an authorized endpoint:
+    # e.g. "GET /people/<username>/books.json"
+    # Currently just returning a static example
+    mock_response = {
+        "username": "example_user",
+        "books": [
+            {"key": "/books/OL100M", "title": "My Favorite Book"},
+            {"key": "/books/OL200M", "title": "Another Great Book"}
+        ]
+    }
+    return jsonify(mock_response)
+
+
+# 4. Authors API
+@app.route('/api/author/<author_id>', methods=['GET'])
+def get_author_details(author_id):
+    """
+    Example: /api/author/OL33421A
+    """
+    try:
+        url = f"{OPEN_LIBRARY_AUTHORS}{author_id}.json"
+        resp = requests.get(url, timeout=10)
+        if not resp.ok:
+            return jsonify({"error": f"Author {author_id} not found"}), resp.status_code
+        return jsonify(resp.json())
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# 5. Subjects API
+@app.route('/api/subjects/<subject_name>', methods=['GET'])
+def get_subject_books(subject_name):
+    """
+    Example: /api/subjects/science_fiction
+    This returns books for a subject directly from /subjects/<subject_name>.json
+    """
+    try:
+        url = f"{OPEN_LIBRARY_SUBJECTS}{subject_name}.json"
+        resp = requests.get(url, timeout=10)
+        if not resp.ok:
+            return jsonify({"error": f"Subject {subject_name} not found"}), resp.status_code
+        return jsonify(resp.json())
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# 6. Search Inside API (Stub - not documented for direct usage)
+@app.route('/api/search_inside', methods=['GET'])
+def search_inside_stub():
+    """
+    Stub. If you had parameters to query inside text, you might do:
+    GET https://openlibrary.org/search/inside.json?q=some_text
+    But it's not publicly documented. We'll just illustrate a stub.
+    """
+    query = request.args.get('q', '')
+    mock_response = {
+        "query": query,
+        "results": [
+            {"snippet": "Here is some text mentioning your query..."},
+            # ...
+        ]
+    }
+    return jsonify(mock_response)
+
+
+# 7. Partner API (Read API) - Stub
+@app.route('/api/partner', methods=['POST'])
+def partner_api_stub():
+    """
+    Formerly the 'Read' API for library identifiers (ISBNs, OCLC, LCCNs).
+    You might pass in a JSON body with IDs, then fetch from an endpoint if you have access.
+    """
+    data = request.json or {}
+    ids = data.get('ids', [])
+    mock_response = {
+        "queried_ids": ids,
+        "status": "stub",
+        "message": "Partner/Read API requires special usage"
+    }
+    return jsonify(mock_response)
+
+
+# 8. Covers API
+@app.route('/api/covers', methods=['GET'])
+def covers_api_example():
+    """
+    Example usage of the Covers API. 
+    e.g., /api/covers?isbn=9780140328721
+    We'll build a URL to covers.openlibrary.org and return a link.
+    """
+    isbn = request.args.get('isbn')
+    if not isbn:
+        return jsonify({"error": "No ISBN provided"}), 400
+
+    # For instance, the Covers API usage: /b/isbn/<isbn>-L.jpg
+    cover_url = f"{OPEN_LIBRARY_COVERS}/b/isbn/{isbn}-L.jpg"
+    # You might want to test if it exists, or just return the URL:
+    return jsonify({"cover_url": cover_url})
+
+
+# 9. Recent Changes API
+@app.route('/api/recent_changes', methods=['GET'])
+def recent_changes_stub():
+    """
+    Access to recent changes. By default, openlibrary.org/recentchanges . 
+    It's not well documented for large queries. 
+    This is a stub.
+    """
+    limit = request.args.get('limit', 10)
+    try:
+        resp = requests.get(f"{OPEN_LIBRARY_RECENT_CHANGES}.json?limit={limit}", timeout=10)
+        if not resp.ok:
+            return jsonify({"error": "Recent Changes request failed"}), resp.status_code
+        return jsonify(resp.json())
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# 10. Lists API (Stub)
+@app.route('/api/lists', methods=['GET'])
+def lists_api_stub():
+    """
+    The Lists feature on Open Library is partially documented. 
+    Typically /people/<username>/lists . This is a stub.
+    """
+    username = request.args.get('username', 'someuser')
+    mock_response = {
+        "username": username,
+        "lists": [
+            {
+                "name": "Fiction Favorites",
+                "books": ["/books/OL123M", "/books/OL456M"]
+            }
+        ]
+    }
+    return jsonify(mock_response)
+
+
+# --------------------------------------------------------------------------------
+#                         Main Entry Point
+# --------------------------------------------------------------------------------
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
