@@ -31,10 +31,12 @@ CORS(app, resources={
 OPEN_LIBRARY_SEARCH = "https://openlibrary.org/search.json"
 OPEN_LIBRARY_WORKS = "https://openlibrary.org/works/"
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
-OPENLIB_TIMEOUT = 10
+OPENLIB_TIMEOUT = 200  # Increased timeout
 MAX_RETRIES = 3
-CONCURRENT_REQUESTS = 3
-REQUEST_TIMEOUT = 20
+CONCURRENT_REQUESTS = 5
+REQUEST_TIMEOUT = 30  # Increased timeout
+MAX_BOOKS_PER_REQUEST = 5
+MAX_RECOMMENDATIONS_PER_SUBJECT = 10
 
 class RateLimiter:
     def __init__(self, requests_per_day: int, tokens_per_minute: int):
@@ -431,6 +433,8 @@ def test_endpoint():
 
 @app.route('/api/recommend', methods=['POST', 'OPTIONS'])
 def get_recommendations():
+    start_time = time.time()
+
     if request.method == 'OPTIONS':
         response = jsonify({'status': 'ok'})
         response.headers.add('Access-Control-Allow-Origin', 'https://lemon-water-065707a1e.4.azurestaticapps.net')
@@ -443,12 +447,14 @@ def get_recommendations():
         if not data or not data.get('books'):
             return jsonify({'error': 'No books provided'}), 400
 
-        book_titles = data['books']
+        book_titles = data['books'][:5]  # Limit to 5 books max
         filters = data.get('filters', {})
         print(f"Processing recommendation request for books: {book_titles}")
 
         try:
             input_books, input_book_ids, input_authors = recommender.process_input_books(book_titles)
+            if time.time() - start_time > 180:  # 3 minute check
+                return jsonify({'error': 'Book processing took too long. Please try with fewer books.'}), 408
         except Exception as e:
             print(f"Error processing input books: {str(e)}")
             return jsonify({'error': 'Failed to process input books. Please try again.'}), 500
@@ -468,19 +474,41 @@ def get_recommendations():
 
         # Find recommendations
         for subject, _ in common_subjects:
+            # Check timeout before processing each subject
+            elapsed_time = time.time() - start_time
+            if elapsed_time > 540:  # 9 minute threshold
+                if recommendations:
+                    filtered_recommendations = apply_filters(recommendations, filters)
+                    final_recommendations = sorted(
+                        filtered_recommendations,
+                        key=lambda x: x['similarity_score'],
+                        reverse=True
+                    )[:2]
+                    return jsonify({
+                        'status': 'partial',
+                        'recommendations': final_recommendations,
+                        'message': 'Request took too long, returning partial results'
+                    })
+                else:
+                    return jsonify({'error': 'Processing timeout. Please try with fewer books.'}), 408
+
             try:
                 response = requests.get(
                     OPEN_LIBRARY_SEARCH,
                     params={
                         'q': f'subject:{subject}',
                         'fields': 'key,title,author_name,first_publish_year,subject,cover_i',
-                        'limit': 20
+                        'limit': 10  # Reduced from 20
                     },
-                    timeout=OPENLIB_TIMEOUT
+                    timeout=10  # Short timeout
                 )
 
                 if response.ok:
                     for book in response.json().get('docs', []):
+                        # Check timeout inside book loop
+                        if time.time() - start_time > 540:  # 9 minute threshold
+                            break
+
                         book_id = book.get('key', '').split('/')[-1]
                         author = book.get('author_name', ['Unknown'])[0] if book.get('author_name') else 'Unknown'
 
@@ -491,11 +519,23 @@ def get_recommendations():
                             book_details = recommender.get_book_details(book_id)
                             if book_details:
                                 similarity_score = recommender.calculate_similarity_score(book_details, input_books)
+                                # Skip low similarity scores
+                                if similarity_score * 100 < 30:  # 30% threshold
+                                    continue
+                                    
                                 reading_level = recommender.determine_reading_level(book_details)
                                 narrative_style = recommender.analyze_narrative_style(book_details)
-                                explanation = recommender.generate_similarity_explanation_with_ai(
-                                    book_details, input_books, similarity_score * 100
-                                )
+                                
+                                # Try AI explanation with timeout
+                                try:
+                                    explanation = recommender.generate_similarity_explanation_with_ai(
+                                        book_details, input_books, similarity_score * 100
+                                    )
+                                except Exception as e:
+                                    print(f"AI explanation failed: {str(e)}")
+                                    explanation = recommender.generate_fallback_explanation(
+                                        book_details, input_books, similarity_score * 100
+                                    )
 
                                 recommendation = {
                                     'id': book_id,
@@ -512,6 +552,10 @@ def get_recommendations():
 
                                 recommendations.append(recommendation)
                                 seen_books.add(book_id)
+                                
+                                # Check if we have enough recommendations
+                                if len(recommendations) >= 10:  # Get more than needed for filtering
+                                    break
 
             except requests.exceptions.Timeout:
                 print(f"Timeout while searching for subject: {subject}")
@@ -519,6 +563,10 @@ def get_recommendations():
             except Exception as e:
                 print(f"Error processing subject {subject}: {str(e)}")
                 continue
+            
+            # Return early if we have enough recommendations
+            if len(recommendations) >= 10:
+                break
 
         # Filter and sort recommendations
         filtered_recommendations = apply_filters(recommendations, filters)
@@ -527,6 +575,14 @@ def get_recommendations():
             key=lambda x: x['similarity_score'],
             reverse=True
         )[:2]  # Return top 2 recommendations
+
+        if not final_recommendations and recommendations:
+            # If filtering removed all recommendations, return top 2 unfiltered
+            final_recommendations = sorted(
+                recommendations,
+                key=lambda x: x['similarity_score'],
+                reverse=True
+            )[:2]
 
         return jsonify({
             'status': 'completed',
