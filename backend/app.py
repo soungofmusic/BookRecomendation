@@ -394,12 +394,18 @@ def get_recommendations():
     try:
         print("Received recommendation request")
         data = request.json
+        if not data:
+            print("Error: No JSON data received")
+            return jsonify({'error': 'No data provided'}), 400
+
         book_titles = data.get('books', [])
+        if not book_titles:
+            print("Error: No books provided in request")
+            return jsonify({'error': 'No books provided'}), 400
+        
+        print(f"Processing request for books: {book_titles}")
         filters = data.get('filters', {})
         print(f"\n--- Starting recommendation process for books: {book_titles} ---")
-
-        if not book_titles:
-            return jsonify({'error': 'No books provided'}), 400
 
         input_books = []
         input_book_ids = set()
