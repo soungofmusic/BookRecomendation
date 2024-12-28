@@ -555,7 +555,7 @@ def get_recommendations():
             filtered_recommendations,
             key=lambda x: x['similarity_score'],
             reverse=True
-        )[:5]  # Increased from 2 to 5 recommendations
+        )[:2]  # Return top 2 recommendations
 
         # Generate explanations and recommendations for final set
         for recommendation in final_recommendations:
