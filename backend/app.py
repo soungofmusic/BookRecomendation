@@ -47,6 +47,11 @@ MAX_RECOMMENDATIONS_PER_SUBJECT = 10  # Maximum recommendations per subject
 BATCH_SIZE = 5             # Process books in batches
 MIN_SIMILARITY_SCORE = 5   # Minimum similarity score threshold
 
+HEADERS = {
+    "User-Agent": "ReadNext/1.0 (oungs@oregonstate.edu)"
+}
+
+
 class RateLimiter:
     def __init__(self, requests_per_day: int, tokens_per_minute: int):
         self.daily_limit = requests_per_day
@@ -131,6 +136,7 @@ class BookRecommender:
         self.rate_limiter = RateLimiter(14400, 20000)
         self.cache = Cache(3600)
         self.session = requests.Session()  # Use session for connection pooling
+        self.session.headers.update(HEADERS)
         self.executor = ThreadPoolExecutor(max_workers=CONCURRENT_REQUESTS)
         try:
             self.groq_client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
@@ -153,49 +159,47 @@ class BookRecommender:
             return None
 
     def get_book_details(self, book_id: str) -> Optional[Dict]:
-            try:
-                cached_data = self.cache.get(book_id)
-                if cached_data:
-                    return cached_data
+        try:
+            cached_data = self.cache.get(book_id)
+            if cached_data:
+                return cached_data
 
-                for attempt in range(MAX_RETRIES):
-                    try:
-                        work_response = self.session.get(  # Use self.session instead of requests
-                            f"{OPEN_LIBRARY_WORKS}{book_id}.json",
-                            timeout=OPENLIB_TIMEOUT
-                        )
-                        
-                        if work_response.ok:
-                            work_data = work_response.json()
-                            self.cache.set(book_id, work_data)
-                            return work_data
-                        elif work_response.status_code == 404:
-                            print(f"Book not found: {book_id}")
-                            return None
-                        elif attempt < MAX_RETRIES - 1:
-                            time.sleep(0.5)  # Reduced sleep time
-                            continue
-                            
-                    except requests.exceptions.Timeout:
-                        print(f"Timeout fetching book {book_id}")
-                        if attempt < MAX_RETRIES - 1:
-                            time.sleep(0.5)  # Reduced sleep time
-                            continue
+            for attempt in range(MAX_RETRIES):
+                try:
+                    work_response = self.session.get(  # Using session with headers
+                        f"{OPEN_LIBRARY_WORKS}{book_id}.json",
+                        timeout=OPENLIB_TIMEOUT
+                    )
+                    
+                    if work_response.ok:
+                        work_data = work_response.json()
+                        self.cache.set(book_id, work_data)
+                        return work_data
+                    elif work_response.status_code == 404:
+                        print(f"Book not found: {book_id}")
                         return None
+                    elif attempt < MAX_RETRIES - 1:
+                        time.sleep(1)
+                        continue
                         
-                    except Exception as e:
-                        print(f"Error fetching book {book_id}: {str(e)}")
-                        if attempt < MAX_RETRIES - 1:
-                            time.sleep(0.5)  # Reduced sleep time
-                            continue
-                        return None
+                except requests.exceptions.Timeout:
+                    if attempt < MAX_RETRIES - 1:
+                        time.sleep(1)
+                        continue
+                    print(f"Timeout fetching book {book_id}")
+                    return None
+                except Exception as e:
+                    print(f"Error fetching book {book_id}: {str(e)}")
+                    if attempt < MAX_RETRIES - 1:
+                        time.sleep(1)
+                        continue
+                    return None
 
-                return None
-                
-            except Exception as e:
-                print(f"Unexpected error for book {book_id}: {str(e)}")
-                return None
-
+            return None
+        except Exception as e:
+            print(f"Unexpected error for book {book_id}: {str(e)}")
+            return None
+        
     def calculate_similarity_score(self, candidate_book: Dict, input_books: List[Dict]) -> float:
         weights = {
             'subject_match': 0.5,
@@ -380,7 +384,7 @@ class BookRecommender:
 
         def process_single_book(title):
             try:
-                response = requests.get(
+                response = self.session.get(  # Using session with headers
                     OPEN_LIBRARY_SEARCH,
                     params={'q': title, 'fields': 'key,title,author_name,first_publish_year,subject,cover_i', 'limit': 1},
                     timeout=OPENLIB_TIMEOUT
