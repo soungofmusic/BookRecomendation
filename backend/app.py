@@ -31,12 +31,21 @@ CORS(app, resources={
 OPEN_LIBRARY_SEARCH = "https://openlibrary.org/search.json"
 OPEN_LIBRARY_WORKS = "https://openlibrary.org/works/"
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
-OPENLIB_TIMEOUT = 200  # Increased timeout
-MAX_RETRIES = 3
-CONCURRENT_REQUESTS = 5
-REQUEST_TIMEOUT = 30  # Increased timeout
-MAX_BOOKS_PER_REQUEST = 5
-MAX_RECOMMENDATIONS_PER_SUBJECT = 10
+
+# Timeout settings
+OPENLIB_TIMEOUT = 30        # Timeout for OpenLibrary API calls
+REQUEST_TIMEOUT = 20        # Timeout for individual request operations
+OVERALL_TIMEOUT = 540      # Overall timeout for the entire recommendation process (9 minutes)
+
+# Request limits
+MAX_RETRIES = 2            # Reduced from 3
+CONCURRENT_REQUESTS = 3     # Number of concurrent requests
+MAX_BOOKS_PER_REQUEST = 5   # Maximum number of input books
+MAX_RECOMMENDATIONS_PER_SUBJECT = 10  # Maximum recommendations per subject
+
+# Processing settings
+BATCH_SIZE = 5             # Process books in batches
+MIN_SIMILARITY_SCORE = 5   # Minimum similarity score threshold
 
 class RateLimiter:
     def __init__(self, requests_per_day: int, tokens_per_minute: int):
@@ -120,7 +129,8 @@ def apply_filters(recommendations: List[Dict], filters: Dict) -> List[Dict]:
 class BookRecommender:
     def __init__(self):
         self.rate_limiter = RateLimiter(14400, 20000)
-        self.cache = Cache(3600)  # 1 hour cache
+        self.cache = Cache(3600)
+        self.session = requests.Session()  # Use session for connection pooling
         self.executor = ThreadPoolExecutor(max_workers=CONCURRENT_REQUESTS)
         try:
             self.groq_client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
@@ -128,6 +138,7 @@ class BookRecommender:
         except Exception as e:
             print(f"Warning: Could not initialize Groq client: {e}")
             self.groq_client = None
+
 
     def extract_year(self, date_str: str) -> Optional[int]:
         if not date_str:
@@ -142,46 +153,48 @@ class BookRecommender:
             return None
 
     def get_book_details(self, book_id: str) -> Optional[Dict]:
-        try:
-            cached_data = self.cache.get(book_id)
-            if cached_data:
-                return cached_data
+            try:
+                cached_data = self.cache.get(book_id)
+                if cached_data:
+                    return cached_data
 
-            for attempt in range(MAX_RETRIES):
-                try:
-                    work_response = requests.get(
-                        f"{OPEN_LIBRARY_WORKS}{book_id}.json",
-                        timeout=OPENLIB_TIMEOUT
-                    )
-                    
-                    if work_response.ok:
-                        work_data = work_response.json()
-                        self.cache.set(book_id, work_data)
-                        return work_data
-                    elif work_response.status_code == 404:
-                        print(f"Book not found: {book_id}")
-                        return None
-                    elif attempt < MAX_RETRIES - 1:
-                        time.sleep(1)
-                        continue
+                for attempt in range(MAX_RETRIES):
+                    try:
+                        work_response = self.session.get(  # Use self.session instead of requests
+                            f"{OPEN_LIBRARY_WORKS}{book_id}.json",
+                            timeout=OPENLIB_TIMEOUT
+                        )
                         
-                except requests.exceptions.Timeout:
-                    if attempt < MAX_RETRIES - 1:
-                        time.sleep(1)
-                        continue
-                    print(f"Timeout fetching book {book_id}")
-                    return None
-                except Exception as e:
-                    print(f"Error fetching book {book_id}: {str(e)}")
-                    if attempt < MAX_RETRIES - 1:
-                        time.sleep(1)
-                        continue
-                    return None
+                        if work_response.ok:
+                            work_data = work_response.json()
+                            self.cache.set(book_id, work_data)
+                            return work_data
+                        elif work_response.status_code == 404:
+                            print(f"Book not found: {book_id}")
+                            return None
+                        elif attempt < MAX_RETRIES - 1:
+                            time.sleep(0.5)  # Reduced sleep time
+                            continue
+                            
+                    except requests.exceptions.Timeout:
+                        print(f"Timeout fetching book {book_id}")
+                        if attempt < MAX_RETRIES - 1:
+                            time.sleep(0.5)  # Reduced sleep time
+                            continue
+                        return None
+                        
+                    except Exception as e:
+                        print(f"Error fetching book {book_id}: {str(e)}")
+                        if attempt < MAX_RETRIES - 1:
+                            time.sleep(0.5)  # Reduced sleep time
+                            continue
+                        return None
 
-            return None
-        except Exception as e:
-            print(f"Unexpected error for book {book_id}: {str(e)}")
-            return None
+                return None
+                
+            except Exception as e:
+                print(f"Unexpected error for book {book_id}: {str(e)}")
+                return None
 
     def calculate_similarity_score(self, candidate_book: Dict, input_books: List[Dict]) -> float:
         weights = {
