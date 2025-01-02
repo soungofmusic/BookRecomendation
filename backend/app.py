@@ -33,7 +33,7 @@ GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 # Timeout configurations
 GROQ_TIMEOUT = 900  # 15 minutes
-OPENLIB_TIMEOUT = 120  # 2 minutes
+OPENLIB_TIMEOUT = 240  # 6 minutes
 MAX_RETRIES = 5
 
 
