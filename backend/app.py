@@ -13,7 +13,6 @@ from flask_cors import CORS
 load_dotenv()
 
 app = Flask(__name__)
-app = Flask(__name__)
 CORS(app, resources={
     r"/api/*": {
         "origins": ["https://lemon-water-065707a1e.4.azurestaticapps.net"],
