@@ -159,8 +159,8 @@ class BookRecommender:
 
     def calculate_similarity_score(self, candidate_book: Dict, input_books: List[Dict]) -> float:
         weights = {
-            'subject_match': 0.6,
-            'year_match': 0.4
+            'subject_match': 0.8,
+            'year_match': 0.2
         }
 
         input_subjects = set()
