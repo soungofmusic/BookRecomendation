@@ -1,6 +1,5 @@
 from flask import Flask, request, jsonify
 import requests
-import json
 import time
 from typing import List, Dict, Any, Optional
 from collections import Counter
