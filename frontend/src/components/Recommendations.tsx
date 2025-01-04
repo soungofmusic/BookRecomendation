@@ -41,6 +41,32 @@ const Tooltip: React.FC<TooltipProps> = ({ content, children }) => (
   </div>
 );
 
+
+const BookCover: React.FC<{ book: Book }> = React.memo(({ book }) => {
+  const [imageLoaded, setImageLoaded] = useState(false);
+
+  return (
+    <div className="relative flex-shrink-0 w-24 h-36 bg-gray-100 dark:bg-gray-800 rounded overflow-hidden group">
+      {/* Blur placeholder */}
+      {book.cover_url && !imageLoaded && (
+        <div className="absolute inset-0 animate-pulse bg-skeleton-gradient bg-skeleton">
+          <div className="w-full h-full bg-shimmer-gradient animate-shimmer" />
+          <span className="absolute inset-0 flex items-center justify-center text-2xl font-bold text-gray-400">
+            {book.title[0]}
+          </span>
+        </div>
+      )}
+
+      {/* Main image or fallback */}
+      <BookCover book={book} />
+
+      {/* Hover overlay */}
+      <div className="absolute inset-0 bg-black bg-opacity-50 opacity-0 group-hover:opacity-100
+                    transition-opacity duration-300 flex flex-col justify-end p-2" />
+    </div>
+  );
+});
+
 // Main Component
 const Recommendations: React.FC<RecommendationsProps> = ({
   recommendations,
