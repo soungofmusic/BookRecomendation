@@ -39,15 +39,6 @@ A modern web application that provides personalized book recommendations based o
 5. Receive custom book recommendations with AI-generated explanations
 6. Find books in nearby libraries
 
-## 🔮 Future Features
-
-- User accounts and saved recommendations
-- Social sharing functionality
-- Reading history tracking
-- Personal book collections
-- Advanced filtering options
-- Reading progress tracking
-
 ## 🙏 Acknowledgments
 
 - Book data provided by OpenLibrary API
