@@ -514,53 +514,53 @@ class BookRecommender:
         return score
 
     def generate_explanation(self, book: Dict, input_books: List[Dict], similarity_score: float) -> str:
-    """Generate explanation of why this book was recommended"""
-    # Use enhanced explanation if component scores are available
-    if 'component_scores' in book and hasattr(self, 'use_enhanced_algorithm') and self.use_enhanced_algorithm:
-        try:
-            explanation = self.lightweight_recommender.generate_detailed_explanation(
-                book, input_books, similarity_score * 100, book['component_scores']
-            )
-            return explanation
-        except Exception as e:
-            print(f"Error generating enhanced explanation: {str(e)}")
-            # Fall back to basic explanation on error
+        """Generate explanation of why this book was recommended"""
+        # Use enhanced explanation if component scores are available
+        if 'component_scores' in book and hasattr(self, 'use_enhanced_algorithm') and self.use_enhanced_algorithm:
+            try:
+                explanation = self.lightweight_recommender.generate_detailed_explanation(
+                    book, input_books, similarity_score * 100, book['component_scores']
+                )
+                return explanation
+            except Exception as e:
+                print(f"Error generating enhanced explanation: {str(e)}")
+                # Fall back to basic explanation on error
+        
+        # Basic explanation (your original implementation)
+        explanations = []
     
-    # Basic explanation (your original implementation)
-    explanations = []
-
-    book_subjects = set(book.get('subjects', []) if isinstance(book.get('subjects', []), list) else [])
-    input_subjects = set()
-    for input_book in input_books:
-        if isinstance(input_book.get('subjects', []), list):
-            input_subjects.update(input_book.get('subjects', []))
-
-    shared_subjects = book_subjects & input_subjects
-    if shared_subjects:
-        subject_examples = list(shared_subjects)[:3]
-        explanations.append(f"shares genres like {', '.join(subject_examples)}")
-
-    book_year = self.extract_year(book.get('first_publish_date', ''))
-    input_years = []
-    for input_book in input_books:
-        year = self.extract_year(input_book.get('first_publish_date', ''))
-        if year:
-            input_years.append(year)
-
-    if input_years and book_year:
-        avg_year = sum(input_years) / len(input_years)
-        year_diff = abs(book_year - avg_year)
-        if year_diff <= 20:
-            explanations.append("was published around the same time")
-        elif year_diff <= 50:
-            explanations.append("was published in a similar era")
-
-    if explanations:
-        explanation = f"This book was recommended because it {' and '.join(explanations)}, with a {similarity_score:.1f}% match to your preferences."
-    else:
-        explanation = "This book matches your reading preferences."
-
-    return explanation
+        book_subjects = set(book.get('subjects', []) if isinstance(book.get('subjects', []), list) else [])
+        input_subjects = set()
+        for input_book in input_books:
+            if isinstance(input_book.get('subjects', []), list):
+                input_subjects.update(input_book.get('subjects', []))
+    
+        shared_subjects = book_subjects & input_subjects
+        if shared_subjects:
+            subject_examples = list(shared_subjects)[:3]
+            explanations.append(f"shares genres like {', '.join(subject_examples)}")
+    
+        book_year = self.extract_year(book.get('first_publish_date', ''))
+        input_years = []
+        for input_book in input_books:
+            year = self.extract_year(input_book.get('first_publish_date', ''))
+            if year:
+                input_years.append(year)
+    
+        if input_years and book_year:
+            avg_year = sum(input_years) / len(input_years)
+            year_diff = abs(book_year - avg_year)
+            if year_diff <= 20:
+                explanations.append("was published around the same time")
+            elif year_diff <= 50:
+                explanations.append("was published in a similar era")
+    
+        if explanations:
+            explanation = f"This book was recommended because it {' and '.join(explanations)}, with a {similarity_score:.1f}% match to your preferences."
+        else:
+            explanation = "This book matches your reading preferences."
+    
+        return explanation
 
     def generate_reading_recommendation(self, book: Dict, input_books: List[Dict]) -> str:
         parts = []
