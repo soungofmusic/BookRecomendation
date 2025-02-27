@@ -221,7 +221,7 @@ function App() {
     if (!isLoadingMore && hasMore && lastSubmittedBooks.length > 0) {
       fetchRecommendations(lastSubmittedBooks, currentPage + 1, true);
     }
-  }, [isLoadingMore, hasMore, lastSubmittedBooks, currentPage]);
+  }, [isLoadingMore, hasMore, lastSubmittedBooks, currentPage, fetchRecommendations]);
 
   return (
     <div className="min-h-screen min-h-[calc(var(--vh,1vh)*100)] bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-gray-900 dark:to-gray-800 transition-colors duration-200">
