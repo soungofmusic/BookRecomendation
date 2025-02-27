@@ -1,7 +1,7 @@
 from flask import Flask, request, jsonify
 import requests
 import time
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Tuple, Optional
 from collections import Counter
 from datetime import datetime, timedelta
 import os
@@ -9,6 +9,8 @@ from threading import Lock
 from dotenv import load_dotenv
 from groq import Groq
 from flask_cors import CORS
+import math
+import re
 
 load_dotenv()
 
@@ -99,6 +101,297 @@ def apply_filters(recommendations: List[Dict], filters: Dict) -> List[Dict]:
 
     return filtered_books
 
+class LightweightBookRecommender:
+    """A memory-efficient book recommendation engine without ML dependencies"""
+    
+    def __init__(self):
+        # Define weights for different features
+        self.weights = {
+            'subject_match': 0.40,    # Genre/subject overlap
+            'subject_depth': 0.15,    # How specifically the genres match
+            'year_relevance': 0.15,   # Publication year proximity
+            'author_relation': 0.15,  # Related authors/similar books
+            'popularity': 0.15,       # Book popularity (editions, etc.)
+        }
+        
+        # Stopwords to remove from subjects for better matching
+        self.common_words = set(['fiction', 'novel', 'book', 'literature', 'story', 'stories', 'the', 'and', 'of', 'in'])
+        
+        print("Lightweight Book Recommender initialized successfully")
+    
+    def extract_year(self, date_str: str) -> Optional[int]:
+        """Extract publication year from date string"""
+        if not date_str:
+            return None
+        try:
+            return int(str(date_str)[:4])
+        except (ValueError, TypeError):
+            import re
+            year_match = re.search(r'\d{4}', str(date_str).strip())
+            if year_match:
+                return int(year_match.group())
+            return None
+    
+    def normalize_subject(self, subject: str) -> str:
+        """Clean and normalize a subject/genre string"""
+        if not subject:
+            return ""
+        
+        # Lowercase and remove special characters
+        subject = subject.lower()
+        subject = re.sub(r'[^\w\s]', '', subject)
+        
+        # Remove common words
+        words = [w for w in subject.split() if w not in self.common_words]
+        
+        return " ".join(words).strip()
+    
+    def calculate_subject_match(self, book_subjects: List[str], input_subjects: List[str]) -> float:
+        """Calculate improved subject/genre matching score"""
+        if not book_subjects or not input_subjects:
+            return 0.0
+        
+        # Clean and normalize subjects
+        book_subj_clean = [self.normalize_subject(s) for s in book_subjects if s]
+        input_subj_clean = [self.normalize_subject(s) for s in input_subjects if s]
+        
+        book_subj_clean = [s for s in book_subj_clean if s]  # Remove empty strings
+        input_subj_clean = [s for s in input_subj_clean if s]
+        
+        if not book_subj_clean or not input_subj_clean:
+            return 0.0
+        
+        # Calculate weighted Jaccard similarity
+        # - Primary subjects (first 3) get higher weight
+        primary_weight = 0.7
+        secondary_weight = 0.3
+        
+        primary_book = set(book_subj_clean[:3])
+        primary_input = set(input_subj_clean[:3])
+        secondary_book = set(book_subj_clean[3:])
+        secondary_input = set(input_subj_clean[3:])
+        
+        # Calculate similarities
+        primary_intersection = len(primary_book.intersection(primary_input))
+        primary_union = len(primary_book.union(primary_input))
+        
+        all_book = primary_book.union(secondary_book)
+        all_input = primary_input.union(secondary_input)
+        all_intersection = len(all_book.intersection(all_input))
+        all_union = len(all_book.union(all_input))
+        
+        # Calculate scores
+        primary_score = primary_intersection / primary_union if primary_union > 0 else 0
+        all_score = all_intersection / all_union if all_union > 0 else 0
+        
+        # Combine scores with weights
+        final_score = (primary_weight * primary_score) + (secondary_weight * all_score)
+        
+        return final_score
+    
+    def calculate_subject_depth(self, book_subjects: List[str], input_subjects: List[str]) -> float:
+        """Assess how specifically the genres match beyond basic overlap"""
+        if not book_subjects or not input_subjects:
+            return 0.0
+        
+        # Count term frequencies across both sets
+        book_terms = Counter()
+        input_terms = Counter()
+        
+        for subject in book_subjects:
+            for word in self.normalize_subject(subject).split():
+                if word:
+                    book_terms[word] += 1
+                    
+        for subject in input_subjects:
+            for word in self.normalize_subject(subject).split():
+                if word:
+                    input_terms[word] += 1
+        
+        # Find shared terms that are relatively uncommon
+        shared_terms = set(book_terms.keys()).intersection(set(input_terms.keys()))
+        
+        if not shared_terms:
+            return 0.0
+            
+        # Score based on specificity - terms appearing in fewer subjects are weighted more
+        specificity_score = 0
+        for term in shared_terms:
+            # Lower frequency terms get higher weight
+            term_weight = 1.0 / (book_terms[term] + input_terms[term])
+            specificity_score += term_weight
+            
+        # Normalize
+        max_possible = len(shared_terms)  # Maximum if all terms appeared exactly once
+        normalized_score = min(specificity_score / max_possible, 1.0) if max_possible > 0 else 0
+        
+        return normalized_score
+    
+    def calculate_year_relevance(self, book_year: Optional[int], input_years: List[int]) -> float:
+        """Calculate similarity based on publication year proximity"""
+        if not book_year or not input_years:
+            return 0.5  # Neutral score if years unknown
+            
+        avg_year = sum(input_years) / len(input_years)
+        
+        # Implement a sigmoid-like function for year difference
+        # This gives more weight to books from similar time periods
+        year_diff = abs(book_year - avg_year)
+        
+        if year_diff <= 5:
+            return 1.0  # Very close years
+        elif year_diff <= 20:
+            return 0.8  # Same generation
+        elif year_diff <= 50:
+            return 0.6  # Within living memory
+        elif year_diff <= 100:
+            return 0.4  # Historical but not ancient
+        else:
+            return 0.2  # Different historical era
+    
+    def calculate_author_relation(self, book: Dict[str, Any], input_books: List[Dict[str, Any]]) -> float:
+        """Calculate similarity based on author relationships"""
+        # Extract author info
+        book_author = None
+        if book.get('author_name'):
+            book_author = book['author_name'][0] if isinstance(book['author_name'], list) else book['author_name']
+            
+        if not book_author:
+            return 0.0
+            
+        # Check for exact author match - strong signal
+        for input_book in input_books:
+            input_author = None
+            if input_book.get('author_name'):
+                input_author = input_book['author_name'][0] if isinstance(input_book['author_name'], list) else input_book['author_name']
+                
+            if input_author and input_author.lower() == book_author.lower():
+                return 1.0  # Same author
+        
+        # Check for partial author name match (e.g., last name)
+        book_author_parts = re.split(r'[\s,]+', book_author.lower())
+        for input_book in input_books:
+            input_author = None
+            if input_book.get('author_name'):
+                input_author = input_book['author_name'][0] if isinstance(input_book['author_name'], list) else input_book['author_name']
+                
+            if input_author:
+                input_author_parts = re.split(r'[\s,]+', input_author.lower())
+                # Check for last name match
+                if book_author_parts and input_author_parts and book_author_parts[-1] == input_author_parts[-1]:
+                    return 0.5  # Same last name
+        
+        # Default modest score - could be improved with more data
+        return 0.1
+    
+    def calculate_popularity(self, book: Dict[str, Any]) -> float:
+        """Calculate normalized popularity score"""
+        # Use editions count or other metrics if available
+        popularity_signals = [
+            book.get('edition_count', 0),
+            len(book.get('publisher', [])) if isinstance(book.get('publisher', []), list) else 0,
+            book.get('number_of_pages_median', 0) > 0  # Boolean value based on whether page count exists
+        ]
+        
+        # Simple score based on available signals
+        score = sum(1 for signal in popularity_signals if signal > 0) / len(popularity_signals)
+        
+        return score
+    
+    def calculate_enhanced_similarity(self, book: Dict[str, Any], input_books: List[Dict[str, Any]]) -> Tuple[float, Dict[str, float]]:
+        """Calculate enhanced similarity score between candidate book and input books"""
+        # Calculate individual feature scores
+        scores = {}
+        
+        # Subject match score
+        book_subjects = book.get('subjects', [])
+        all_input_subjects = []
+        for input_book in input_books:
+            if 'subjects' in input_book and isinstance(input_book['subjects'], list):
+                all_input_subjects.extend(input_book['subjects'])
+                
+        scores['subject_match'] = self.calculate_subject_match(book_subjects, all_input_subjects)
+        
+        # Subject depth score
+        scores['subject_depth'] = self.calculate_subject_depth(book_subjects, all_input_subjects)
+        
+        # Year relevance
+        book_year = self.extract_year(book.get('first_publish_date', ''))
+        input_years = []
+        for input_book in input_books:
+            year = self.extract_year(input_book.get('first_publish_date', ''))
+            if year:
+                input_years.append(year)
+                
+        scores['year_relevance'] = self.calculate_year_relevance(book_year, input_years)
+        
+        # Author relation
+        scores['author_relation'] = self.calculate_author_relation(book, input_books)
+        
+        # Popularity score
+        scores['popularity'] = self.calculate_popularity(book)
+        
+        # Combine scores using weights
+        final_score = 0
+        for feature, score in scores.items():
+            if feature in self.weights:
+                final_score += score * self.weights[feature]
+                
+        return final_score, scores
+    
+    def generate_detailed_explanation(self, book: Dict[str, Any], input_books: List[Dict[str, Any]], 
+                                     score: float, component_scores: Dict[str, float]) -> str:
+        """Generate detailed explanation of why this book was recommended"""
+        reasons = []
+        
+        # Subject match explanation
+        if component_scores.get('subject_match', 0) > 0.6:
+            # Find the most notable shared subjects
+            book_subjects = book.get('subjects', [])
+            all_input_subjects = []
+            for input_book in input_books:
+                if isinstance(input_book.get('subjects', []), list):
+                    all_input_subjects.extend(input_book['subjects'])
+                    
+            # Get shared subjects
+            book_set = set([s.lower() for s in book_subjects if s])
+            input_set = set([s.lower() for s in all_input_subjects if s])
+            shared = book_set.intersection(input_set)
+            
+            if shared:
+                examples = list(shared)[:3]
+                reasons.append(f"it shares genres you enjoy like {', '.join(examples)}")
+        
+        # Year relevance explanation
+        if component_scores.get('year_relevance', 0) > 0.7:
+            book_year = self.extract_year(book.get('first_publish_date', ''))
+            reasons.append(f"it's from the same era ({book_year})")
+        elif component_scores.get('year_relevance', 0) > 0.5:
+            reasons.append("it's from a similar time period")
+        
+        # Author relation explanation
+        if component_scores.get('author_relation', 0) > 0.9:
+            book_author = book.get('author_name', [''])[0] if isinstance(book.get('author_name', []), list) else book.get('author_name', '')
+            reasons.append(f"it's by an author you've enjoyed ({book_author})")
+        elif component_scores.get('author_relation', 0) > 0.4:
+            reasons.append("it's by an author similar to ones you've read")
+        
+        # Subject depth explanation
+        if component_scores.get('subject_depth', 0) > 0.6 and component_scores.get('subject_match', 0) > 0.4:
+            reasons.append("it has themes that closely match your reading preferences")
+        
+        # Popularity explanation (only if it's a major factor)
+        if component_scores.get('popularity', 0) > 0.7 and len(reasons) < 3:
+            reasons.append("it's a notable work in its genre")
+        
+        # Create the explanation
+        if reasons:
+            explanation = f"This book has a {round(score)}% match to your preferences because {' and '.join(reasons)}."
+        else:
+            explanation = f"This book has a {round(score)}% match to your reading preferences based on multiple factors."
+        
+        return explanation
+
 class BookRecommender:
     def __init__(self):
         self.rate_limiter = RateLimiter(14400, 20000)
@@ -108,6 +401,15 @@ class BookRecommender:
         except Exception as e:
             print(f"Warning: Could not initialize Groq client: {e}")
             self.groq_client = None
+
+        try:
+            self.lightweight_recommender = LightweightBookRecommender()
+            print("Successfully initialized Lightweight Book Recommender")
+            self.use_enhanced_algorithm = True
+        except Exception as e:
+            print(f"Warning: Could not initialize Lightweight Book Recommender: {e}")
+            print("Falling back to basic similarity algorithm")
+            self.use_enhanced_algorithm = False
 
     def extract_year(self, date_str: str) -> Optional[int]:
         if not date_str:
@@ -158,35 +460,53 @@ class BookRecommender:
             return None
 
     def calculate_similarity_score(self, candidate_book: Dict, input_books: List[Dict]) -> float:
+        """Calculate similarity score between candidate book and input books"""
+        # Use lightweight algorithm if available
+        if hasattr(self, 'use_enhanced_algorithm') and self.use_enhanced_algorithm:
+            try:
+                score, component_scores = self.lightweight_recommender.calculate_enhanced_similarity(
+                    candidate_book, input_books
+                )
+                
+                # Store component scores for later explanation generation
+                candidate_book['component_scores'] = component_scores
+                
+                return score
+            except Exception as e:
+                print(f"Error using lightweight algorithm: {str(e)}")
+                print("Falling back to basic similarity algorithm")
+                # Fall back to basic algorithm on error
+        
+        # Basic algorithm (your original implementation)
         weights = {
             'subject_match': 0.8,
             'year_match': 0.2
         }
-
+    
         input_subjects = set()
         for b in input_books:
             if 'subjects' in b and isinstance(b['subjects'], list):
                 input_subjects.update(b['subjects'])
-
+    
         candidate_subjects = set()
         if 'subjects' in candidate_book and isinstance(candidate_book['subjects'], list):
             candidate_subjects.update(candidate_book['subjects'])
-
+    
         subject_similarity = len(input_subjects & candidate_subjects) / max(len(input_subjects | candidate_subjects), 1)
-
+    
         candidate_year = self.extract_year(candidate_book.get('first_publish_date', ''))
         input_years = []
         for ib in input_books:
             year = self.extract_year(ib.get('first_publish_date', ''))
             if year:
                 input_years.append(year)
-
+    
         if input_years and candidate_year:
             avg_year = sum(input_years) / len(input_years)
             year_similarity = 1 / (1 + abs(candidate_year - avg_year) / 100)
         else:
             year_similarity = 0
-
+    
         score = (
             weights['subject_match'] * subject_similarity +
             weights['year_match'] * year_similarity
@@ -194,40 +514,53 @@ class BookRecommender:
         return score
 
     def generate_explanation(self, book: Dict, input_books: List[Dict], similarity_score: float) -> str:
-        explanations = []
+    """Generate explanation of why this book was recommended"""
+    # Use enhanced explanation if component scores are available
+    if 'component_scores' in book and hasattr(self, 'use_enhanced_algorithm') and self.use_enhanced_algorithm:
+        try:
+            explanation = self.lightweight_recommender.generate_detailed_explanation(
+                book, input_books, similarity_score * 100, book['component_scores']
+            )
+            return explanation
+        except Exception as e:
+            print(f"Error generating enhanced explanation: {str(e)}")
+            # Fall back to basic explanation on error
+    
+    # Basic explanation (your original implementation)
+    explanations = []
 
-        book_subjects = set(book.get('subjects', []) if isinstance(book.get('subjects', []), list) else [])
-        input_subjects = set()
-        for input_book in input_books:
-            if isinstance(input_book.get('subjects', []), list):
-                input_subjects.update(input_book.get('subjects', []))
+    book_subjects = set(book.get('subjects', []) if isinstance(book.get('subjects', []), list) else [])
+    input_subjects = set()
+    for input_book in input_books:
+        if isinstance(input_book.get('subjects', []), list):
+            input_subjects.update(input_book.get('subjects', []))
 
-        shared_subjects = book_subjects & input_subjects
-        if shared_subjects:
-            subject_examples = list(shared_subjects)[:3]
-            explanations.append(f"shares genres like {', '.join(subject_examples)}")
+    shared_subjects = book_subjects & input_subjects
+    if shared_subjects:
+        subject_examples = list(shared_subjects)[:3]
+        explanations.append(f"shares genres like {', '.join(subject_examples)}")
 
-        book_year = self.extract_year(book.get('first_publish_date', ''))
-        input_years = []
-        for input_book in input_books:
-            year = self.extract_year(input_book.get('first_publish_date', ''))
-            if year:
-                input_years.append(year)
+    book_year = self.extract_year(book.get('first_publish_date', ''))
+    input_years = []
+    for input_book in input_books:
+        year = self.extract_year(input_book.get('first_publish_date', ''))
+        if year:
+            input_years.append(year)
 
-        if input_years and book_year:
-            avg_year = sum(input_years) / len(input_years)
-            year_diff = abs(book_year - avg_year)
-            if year_diff <= 20:
-                explanations.append("was published around the same time")
-            elif year_diff <= 50:
-                explanations.append("was published in a similar era")
+    if input_years and book_year:
+        avg_year = sum(input_years) / len(input_years)
+        year_diff = abs(book_year - avg_year)
+        if year_diff <= 20:
+            explanations.append("was published around the same time")
+        elif year_diff <= 50:
+            explanations.append("was published in a similar era")
 
-        if explanations:
-            explanation = f"This book was recommended because it {' and '.join(explanations)}, with a {similarity_score:.1f}% match to your preferences."
-        else:
-            explanation = "This book matches your reading preferences."
+    if explanations:
+        explanation = f"This book was recommended because it {' and '.join(explanations)}, with a {similarity_score:.1f}% match to your preferences."
+    else:
+        explanation = "This book matches your reading preferences."
 
-        return explanation
+    return explanation
 
     def generate_reading_recommendation(self, book: Dict, input_books: List[Dict]) -> str:
         parts = []
