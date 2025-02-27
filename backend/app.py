@@ -708,7 +708,7 @@ recommender = BookRecommender()
 
 @app.route('/api/recommend', methods=['POST', 'OPTIONS'])  
 def get_recommendations():
-        # Handle preflight request
+    # Handle preflight request
     if request.method == 'OPTIONS':
         response = jsonify({'status': 'ok'})
         response.headers.add('Access-Control-Allow-Origin', 'https://lemon-water-065707a1e.4.azurestaticapps.net')
@@ -720,7 +720,12 @@ def get_recommendations():
         data = request.json
         book_titles = data.get('books', [])
         filters = data.get('filters', {})
-        print(f"\n--- Starting recommendation process for books: {book_titles} ---")
+        
+        # Add pagination parameters
+        page = int(request.args.get('page', 1))
+        per_page = int(request.args.get('per_page', 2))
+        
+        print(f"\n--- Starting recommendation process for books: {book_titles} (page {page}, per_page {per_page}) ---")
 
         if not book_titles:
             return jsonify({'error': 'No books provided'}), 400
@@ -730,7 +735,7 @@ def get_recommendations():
         input_authors = set()
 
         try:
-            # Process input books
+            # Process input books (unchanged)
             for title in book_titles:
                 print(f"Processing book: {title}")
                 response = requests.get(
@@ -761,7 +766,7 @@ def get_recommendations():
 
             print(f"Successfully processed {len(input_books)} books")
 
-            # Analyze subjects
+            # Analyze subjects (unchanged)
             all_subjects = []
             for book in input_books:
                 subjects = book.get('subjects', [])
@@ -771,7 +776,7 @@ def get_recommendations():
             seen_books = set()
             recommendations = []
 
-            # Find recommendations
+            # Find recommendations (unchanged)
             for (subject, _) in common_subjects:
                 response = requests.get(
                     OPEN_LIBRARY_SEARCH,
@@ -811,15 +816,35 @@ def get_recommendations():
                                 recommendations.append(recommendation)
                                 seen_books.add(book_id)
 
-            # Filter and sort
+            # Filter and sort all recommendations
             filtered_recommendations = apply_filters(recommendations, filters)
-            final_recommendations = sorted(
+            all_recommendations = sorted(
                 filtered_recommendations,
                 key=lambda x: x['similarity_score'],
                 reverse=True
-            )[:2]
+            )
+            
+            # Apply pagination
+            total_recommendations = len(all_recommendations)
+            start_idx = (page - 1) * per_page
+            end_idx = min(start_idx + per_page, total_recommendations)
+            
+            if start_idx >= total_recommendations:
+                return jsonify({
+                    'status': 'completed',
+                    'recommendations': [],
+                    'pagination': {
+                        'current_page': page,
+                        'per_page': per_page,
+                        'total_items': total_recommendations,
+                        'total_pages': math.ceil(total_recommendations / per_page) or 1
+                    }
+                })
+            
+            paged_recommendations = all_recommendations[start_idx:end_idx]
 
-            for recommendation in final_recommendations:
+            # Enhance recommendations (only for the current page)
+            for recommendation in paged_recommendations:
                 try:
                     book_id = recommendation['id']
                     book_details = recommender.get_book_details(book_id)
@@ -876,11 +901,16 @@ def get_recommendations():
                             book_details, input_books
                         )
 
-
-            # Return final JSON response
+            # Return final JSON response with pagination metadata
             return jsonify({
                 'status': 'completed',
-                'recommendations': final_recommendations
+                'recommendations': paged_recommendations,
+                'pagination': {
+                    'current_page': page,
+                    'per_page': per_page,
+                    'total_items': total_recommendations,
+                    'total_pages': math.ceil(total_recommendations / per_page) or 1
+                }
             })
 
         except Exception as inner_e:
@@ -890,7 +920,6 @@ def get_recommendations():
     except Exception as e:
         print(f"Error generating recommendations: {str(e)}")
         return jsonify({'error': str(e)}), 500
-
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
