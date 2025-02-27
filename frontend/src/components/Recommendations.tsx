@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import LibraryFinder from './LibraryFinder';
 import BookSkeleton from './BookSkeleton';
 
@@ -46,13 +46,6 @@ const Recommendations: React.FC<RecommendationsProps> = ({
   recommendations,
   isLoading
 }) => {
-  // Remove the fixed-size state
-  // const [displayedBooks, setDisplayedBooks] = useState<(Book | null)[]>([null, null]);
-
-  // useEffect(() => {
-  //   setDisplayedBooks(recommendations);
-  // }, [recommendations]);
-
   const renderBook = (book: Book) => {
     return (
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow hover:shadow-xl transition-all duration-300">
