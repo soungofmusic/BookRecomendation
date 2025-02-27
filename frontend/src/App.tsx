@@ -53,7 +53,7 @@ function App() {
     return () => window.removeEventListener('resize', setVH);
   }, []);
 
-  const triggerConfetti = () => {
+  const triggerConfetti = useCallback(() => {
     const isMobile = window.innerWidth < 768;
     confetti({
       particleCount: isMobile ? 50 : 100,
@@ -61,7 +61,7 @@ function App() {
       origin: { y: isMobile ? 0.5 : 0.6 },
       colors: ['#3B82F6', '#6366F1', '#A855F7'],
     });
-
+  
     setTimeout(() => {
       confetti({
         particleCount: isMobile ? 25 : 50,
@@ -70,7 +70,7 @@ function App() {
         colors: ['#3B82F6', '#6366F1', '#A855F7'],
       });
     }, 200);
-  }, []); 
+  }, []);
   
   const getLoadingMessage = (elapsedTime: number) => {
     if (elapsedTime < 20) return "Opening your book collection...";
