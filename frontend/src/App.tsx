@@ -85,7 +85,7 @@ function App() {
     return "Carefully curating your recommendations...";
   };
 
-  const fetchRecommendations = async (books: string[], page: number, isLoadMore: boolean = false) => {
+  const fetchRecommendations = async (books: string[], page: number, isLoadMore: boolean = false): Promise<void> => {
     const loadingStateSetter = isLoadMore ? setIsLoadingMore : setIsLoading;
     const messageSetter = isLoadMore ? () => {} : setLoadingMessage; // Only show messages for initial load
     
