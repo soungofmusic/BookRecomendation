@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import BookInput from './components/BookInput';
 import Recommendations from './components/Recommendations';
 import { Alert, AlertDescription } from './components/Alert';
@@ -18,12 +18,28 @@ interface Book {
   why_read?: string;
 }
 
+interface PaginationData {
+  current_page: number;
+  per_page: number;
+  total_items: number;
+  total_pages: number;
+}
+
 function App() {
-  const [recommendations, setRecommendations] = useState<(Book | null)[]>([null, null]);
+  const [recommendations, setRecommendations] = useState<(Book | null)[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isLoadingMore, setIsLoadingMore] = useState<boolean>(false);
   const [loadingMessage, setLoadingMessage] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pagination, setPagination] = useState<PaginationData | null>(null);
+  const [hasMore, setHasMore] = useState<boolean>(false);
+  
+  // Save input books for "load more" requests
+  const [lastSubmittedBooks, setLastSubmittedBooks] = useState<string[]>([]);
 
   // Handle mobile viewport height
   useEffect(() => {
@@ -69,112 +85,143 @@ function App() {
     return "Carefully curating your recommendations...";
   };
 
+  const fetchRecommendations = async (books: string[], page: number, isLoadMore: boolean = false) => {
+    const loadingStateSetter = isLoadMore ? setIsLoadingMore : setIsLoading;
+    const messageSetter = isLoadMore ? () => {} : setLoadingMessage; // Only show messages for initial load
+    
+    loadingStateSetter(true);
+    if (!isLoadMore) {
+      messageSetter("Starting your literary journey...");
+    }
+    
+    const startTime = Date.now();
+    const loadingUpdateInterval = !isLoadMore ? setInterval(() => {
+      const elapsedTime = Math.floor((Date.now() - startTime) / 1000);
+      messageSetter(getLoadingMessage(elapsedTime));
+    }, 1000) : null;
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 900000);
+
+      const response = await fetch(`https://book-recommender-api-affpgxcqgah8cvah.westus-01.azurewebsites.net/api/recommend?page=${page}&per_page=2`, {
+        method: 'POST',
+        mode: 'cors',
+        credentials: 'omit',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({ books }),
+        signal: controller.signal
+      });
+  
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        const errorMessage = (() => {
+          try {
+            const errorJson = JSON.parse(errorText);
+            return errorJson.error || `Unable to process request: ${response.status}`;
+          } catch {
+            return errorText || `Unable to process request: ${response.status}`;
+          }
+        })();
+        throw new Error(errorMessage);
+      }
+
+      const data = await response.json();
+
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
+      if (data.recommendations?.length) {
+        // Save pagination data
+        if (data.pagination) {
+          setPagination(data.pagination);
+          setCurrentPage(data.pagination.current_page);
+          setHasMore(data.pagination.current_page < data.pagination.total_pages);
+        } else {
+          setHasMore(false);
+        }
+        
+        // Update recommendations based on whether this is initial load or "load more"
+        if (isLoadMore) {
+          setRecommendations(prev => [...prev, ...data.recommendations]);
+        } else {
+          setTimeout(() => {
+            setRecommendations(data.recommendations);
+            triggerConfetti();
+          }, 3000);
+        }
+      } else {
+        if (!isLoadMore) {
+          setError("We couldn't find matching recommendations. Please try different books.");
+          setRecommendations([]);
+        }
+        setHasMore(false);
+      }
+      
+      if (loadingUpdateInterval) clearInterval(loadingUpdateInterval);
+      
+      setTimeout(() => {
+        loadingStateSetter(false);
+        if (!isLoadMore) messageSetter("");
+      }, isLoadMore ? 0 : 2000);
+      
+      setRetryCount(0);
+    } catch (error) {
+      console.error('Error processing recommendations:', error);
+      if (loadingUpdateInterval) clearInterval(loadingUpdateInterval);
+      
+      if (error instanceof Error && 
+          (error.message.includes('Failed to fetch') || 
+           error.message.includes('network')) &&
+          !error.message.includes('500') &&
+          retryCount < 3) {
+        setRetryCount(prev => prev + 1);
+        setError('Reconnecting to our library...');
+        if (!isLoadMore) messageSetter("Retrying connection...");
+        await new Promise(resolve => setTimeout(resolve, Math.pow(3, retryCount) * 2000));
+        return fetchRecommendations(books, page, isLoadMore);
+      }
+      
+      setError(error instanceof Error ? error.message : 'Unable to reach our library at the moment');
+      if (!isLoadMore) {
+        setRecommendations([]);
+      }
+      loadingStateSetter(false);
+      if (!isLoadMore) messageSetter("");
+    }
+  };
+
   const handleBookSubmit = async (books: string[]) => {
     if (books.length !== 5) {
       setError("Please enter exactly 5 books for the best recommendations.");
       return;
     }
     
-    setIsLoading(true);
-    setLoadingMessage("Starting your literary journey...");
+    // Reset states for new search
+    setRecommendations([]);
+    setCurrentPage(1);
+    setPagination(null);
+    setHasMore(false);
     setError(null);
-    setRecommendations([null, null]);
-
-    const makeRequest = async (attempt: number = 0): Promise<void> => {
-      const startTime = Date.now();
-      const loadingUpdateInterval = setInterval(() => {
-        const elapsedTime = Math.floor((Date.now() - startTime) / 1000);
-        setLoadingMessage(getLoadingMessage(elapsedTime));
-      }, 1000);
-
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 900000);
-
-        const response = await fetch('https://book-recommender-api-affpgxcqgah8cvah.westus-01.azurewebsites.net/api/recommend', {
-          method: 'POST',
-          mode: 'cors',
-          credentials: 'omit',
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          },
-          body: JSON.stringify({ books }),
-          signal: controller.signal
-        });
     
-        clearTimeout(timeoutId);
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          const errorMessage = (() => {
-            try {
-              const errorJson = JSON.parse(errorText);
-              return errorJson.error || `Unable to process request: ${response.status}`;
-            } catch {
-              return errorText || `Unable to process request: ${response.status}`;
-            }
-          })();
-          throw new Error(errorMessage);
-        }
-
-        const data = await response.json();
-
-        if (data.error) {
-          throw new Error(data.error);
-        }
-
-        if (data.recommendations?.length) {
-          setTimeout(() => {
-            setRecommendations([
-              data.recommendations[0] || null,
-              data.recommendations[1] || null
-            ]);
-            triggerConfetti();
-          }, 3000);
-        } else {
-          setError("We couldn't find matching recommendations. Please try different books.");
-          setRecommendations([null, null]);
-        }
-        
-        clearInterval(loadingUpdateInterval);
-        setTimeout(() => {
-          setIsLoading(false);
-          setLoadingMessage("");
-        }, 2000);
-        setRetryCount(0);
-
-      } catch (error) {
-        console.error('Error processing recommendations:', error);
-        clearInterval(loadingUpdateInterval);
-        
-        if (error instanceof Error && 
-            (error.message.includes('Failed to fetch') || 
-             error.message.includes('network')) &&
-            !error.message.includes('500') &&
-            attempt < 3) {
-          setRetryCount(attempt + 1);
-          setError('Reconnecting to our library...');
-          setLoadingMessage("Retrying connection...");
-          await new Promise(resolve => setTimeout(resolve, Math.pow(3, attempt) * 2000));
-          return makeRequest(attempt + 1);
-        }
-        
-        setError(error instanceof Error ? error.message : 'Unable to reach our library at the moment');
-        setRecommendations([null, null]);
-        setIsLoading(false);
-        setLoadingMessage("");
-      }
-    };
-
-    try {
-      await makeRequest();
-    } catch (error) {
-      console.error('Error in request:', error);
-      setIsLoading(false);
-      setLoadingMessage("");
-    }
+    // Save the books for potential "load more" requests
+    setLastSubmittedBooks(books);
+    
+    // Fetch first page
+    await fetchRecommendations(books, 1);
   };
+
+  const handleLoadMore = useCallback(() => {
+    if (!isLoadingMore && hasMore && lastSubmittedBooks.length > 0) {
+      fetchRecommendations(lastSubmittedBooks, currentPage + 1, true);
+    }
+  }, [isLoadingMore, hasMore, lastSubmittedBooks, currentPage]);
 
   return (
     <div className="min-h-screen min-h-[calc(var(--vh,1vh)*100)] bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-gray-900 dark:to-gray-800 transition-colors duration-200">
@@ -259,6 +306,36 @@ function App() {
               recommendations={recommendations}
               isLoading={isLoading}
             />
+            
+            {/* Load More Button */}
+            {hasMore && recommendations.length > 0 && (
+              <div className="flex justify-center mt-8">
+                <button
+                  onClick={handleLoadMore}
+                  disabled={isLoadingMore}
+                  className="px-6 py-3 bg-gradient-to-r from-blue-500 to-indigo-500 
+                           text-white rounded-lg font-medium shadow-md
+                           transition-all duration-300 transform hover:scale-105
+                           disabled:opacity-70 disabled:cursor-not-allowed"
+                >
+                  {isLoadingMore ? (
+                    <div className="flex items-center justify-center space-x-2">
+                      <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent" />
+                      <span>Loading...</span>
+                    </div>
+                  ) : (
+                    'Load More Recommendations'
+                  )}
+                </button>
+              </div>
+            )}
+            
+            {/* Pagination Info (optional) */}
+            {pagination && recommendations.length > 0 && (
+              <div className="text-center mt-4 text-sm text-gray-500 dark:text-gray-400">
+                Showing {recommendations.length} of {pagination.total_items} recommendations
+              </div>
+            )}
           </div>
         </div>
 
