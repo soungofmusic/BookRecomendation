@@ -70,7 +70,7 @@ function App() {
         colors: ['#3B82F6', '#6366F1', '#A855F7'],
       });
     }, 200);
-  };
+  }, []); 
   
   const getLoadingMessage = (elapsedTime: number) => {
     if (elapsedTime < 20) return "Opening your book collection...";
