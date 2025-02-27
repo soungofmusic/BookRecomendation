@@ -12,6 +12,7 @@ A modern web application that provides personalized book recommendations based o
 - **Dark Mode**: Comfortable reading experience in any lighting condition
 - **Responsive Design**: Seamless experience across all devices
 - **Library Finder**: Find recommended books in libraries near you
+- **Pagination**: Load more recommendations as you explore with the "Load More" feature
 - **Accessibility**: Full keyboard navigation and screen reader support
 
 ## 🛠 Tech Stack
