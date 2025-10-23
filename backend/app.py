@@ -26,6 +26,17 @@ CORS(app, resources={
     }
 })
 
+# Added after_request to guarantee headers
+@app.after_request
+def after_request(response):
+    origin = request.headers.get('Origin')
+    if origin == 'https://lemon-water-065707a1e.4.azurestaticapps.net':
+        response.headers['Access-Control-Allow-Origin'] = origin
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Accept, Authorization'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+    return response
+
 if not os.environ.get("GROQ_API_KEY"):
     print("Warning: GROQ_API_KEY not found in environment variables")
 
