@@ -618,7 +618,7 @@ class BookRecommender:
                             "role": "user",
                             "content": prompt
                         }],
-                        model="llama3-8b-8192",
+                        model="groq/compound",
                         temperature=0.7,
                         max_tokens=max_tokens,
                         timeout=GROQ_TIMEOUT  # 150 second timeout
