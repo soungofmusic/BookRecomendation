@@ -1,29 +1,9 @@
 {
-  "routes": [
-    {
-      "route": "/api/*",
-      "methods": ["GET", "POST", "OPTIONS"],
-      "allowedRoles": ["anonymous"],
-      "cors": {
-        "allowedOrigins": [
-          "https://lemon-water-065707a1e.4.azurestaticapps.net",
-          "https://book-recommender-api-affpgxcqgah8cvah.westus-01.azurewebsites.net"
-        ],
-        "allowedMethods": ["GET", "POST", "OPTIONS"],
-        "allowedHeaders": ["Content-Type", "Authorization"],
-        "exposedHeaders": ["*"],
-        "maxAge": 3600
-      }
-    }
-  ],
   "navigationFallback": {
     "rewrite": "/index.html"
   },
   "globalHeaders": {
     "Content-Security-Policy": "connect-src 'self' https://book-recommender-api-affpgxcqgah8cvah.westus-01.azurewebsites.net https://openlibrary.org https://covers.openlibrary.org https://api.groq.com; default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:;"
-  },
-  "platform": {
-    "apiRuntime": "python:3.9"
   },
   "buildProperties": {
     "appBuildCommand": "CI=false npm run build"
