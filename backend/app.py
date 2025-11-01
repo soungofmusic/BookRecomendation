@@ -20,11 +20,12 @@ app = Flask(__name__)
 allowed_origin = 'https://lemon-water-065707a1e.4.azurestaticapps.net'
 
 # Use a simpler CORS configuration that applies to all routes
+# Note: Azure Portal has credentials enabled, so we match it
 CORS(app, 
      origins=[allowed_origin],
      methods=['GET', 'POST', 'OPTIONS'],
      allow_headers=['Content-Type', 'Accept', 'Authorization'],
-     supports_credentials=False,
+     supports_credentials=True,  # Match Azure Portal setting
      max_age=3600)
 
 # CRITICAL: Add before_request handler to ensure OPTIONS requests are handled
@@ -36,6 +37,7 @@ def handle_preflight():
         response.headers.add('Access-Control-Allow-Origin', allowed_origin)
         response.headers.add('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
         response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Accept, Authorization')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')  # Match Azure Portal
         response.headers.add('Access-Control-Max-Age', '3600')
         return response
 
@@ -47,6 +49,7 @@ def after_request(response):
     response.headers['Access-Control-Allow-Origin'] = allowed_origin
     response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
     response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Accept, Authorization'
+    response.headers['Access-Control-Allow-Credentials'] = 'true'  # Match Azure Portal
     response.headers['Access-Control-Max-Age'] = '3600'
     return response
 

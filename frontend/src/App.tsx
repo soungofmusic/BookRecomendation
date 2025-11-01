@@ -107,7 +107,7 @@ function App() {
       const response = await fetch(`https://book-recommender-api-affpgxcqgah8cvah.westus-01.azurewebsites.net/api/recommend?page=${page}&per_page=2`, {
         method: 'POST',
         mode: 'cors',
-        credentials: 'omit',
+        credentials: 'include',  // Match Azure Portal CORS credentials setting
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json'
