@@ -77,6 +77,11 @@ jobs:
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_7459A7ADC4AA487595A22DCB68D9728C }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_5E1D44C4E40A42B5953878A51EF3C772 }}
 
+      - name: Wait for app to be ready
+        run: |
+          echo "Waiting 30 seconds for any Azure operations to complete..."
+          sleep 30
+
       - name: 'Deploy to Azure Web App'
         uses: azure/webapps-deploy@v3
         id: deploy-to-webapp
@@ -85,4 +90,6 @@ jobs:
           slot-name: 'Production'
           package: .
           restart: false
+          retry-count: 3
+          retry-interval: 30
           
