@@ -1,61 +1,88 @@
 import sys
 import os
-import importlib.util
 
-# CRITICAL FIX: Azure's PYTHONPATH includes /agents/python first, which has old typing_extensions
-# We need to explicitly load typing_extensions from site-packages before anything else imports it
+# CRITICAL FIX: Azure sets PYTHONPATH with /agents/python FIRST, causing old typing_extensions to be found
+# This MUST happen before ANY other imports, especially before groq/pydantic
 
-# Remove Azure's system typing_extensions from path
-if '/agents/python' in os.environ.get('PYTHONPATH', ''):
-    # Remove it from environment
-    pythonpath = os.environ.get('PYTHONPATH', '')
-    pythonpath = ':'.join([p for p in pythonpath.split(':') if '/agents/python' not in p])
-    os.environ['PYTHONPATH'] = pythonpath
+# Step 1: Fix PYTHONPATH environment variable immediately
+pythonpath = os.environ.get('PYTHONPATH', '')
+if '/agents/python' in pythonpath:
+    paths = pythonpath.split(':') if ':' in pythonpath else [pythonpath] if pythonpath else []
+    paths = [p for p in paths if '/agents/python' not in str(p)]
+    os.environ['PYTHONPATH'] = ':'.join(paths)
 
-# Also remove from sys.path
-problematic_paths = [p for p in sys.path if '/agents/python' in str(p)]
-for path in problematic_paths:
-    if path in sys.path:
-        sys.path.remove(path)
+# Step 2: Remove /agents/python from sys.path BEFORE Python processes it
+# This must be done immediately, before any imports
+original_path = sys.path[:]
+sys.path = [p for p in original_path if '/agents/python' not in str(p)]
 
-# Force site-packages to be first - find where typing_extensions is actually installed
+# Step 3: Ensure site-packages comes first
 import site
+# Get site-packages and move them to front of sys.path
+user_site = site.getusersitepackages()
 site_packages = site.getsitepackages()
+all_site_packages = []
 if site_packages:
-    for sp in site_packages:
-        if sp not in sys.path:
-            sys.path.insert(0, sp)
-        # Check if typing_extensions exists here
-        typing_ext_path = os.path.join(sp, 'typing_extensions.py')
-        typing_ext_init = os.path.join(sp, 'typing_extensions', '__init__.py')
-        if os.path.exists(typing_ext_path) or os.path.exists(typing_ext_init):
-            # Move this to front
-            if sp in sys.path:
-                sys.path.remove(sp)
-            sys.path.insert(0, sp)
+    all_site_packages.extend(site_packages)
+if user_site:
+    all_site_packages.append(user_site)
 
-# Pre-load typing_extensions from the correct location using importlib
+# Find site-packages and move to front
+for sp in all_site_packages:
+    if os.path.exists(sp):
+        if sp in sys.path:
+            sys.path.remove(sp)
+        sys.path.insert(0, sp)
+
+# Step 4: Pre-import typing_extensions to force it into sys.modules from correct location
+# This ensures when pydantic/groq import it, they get the correct version
 try:
-    # Find typing_extensions module file
+    # Try to find typing_extensions in site-packages
+    import importlib.util
     import importlib
-    spec = importlib.util.find_spec('typing_extensions')
-    if spec and spec.origin and '/agents/python' not in str(spec.origin):
-        # Force reload from correct location
-        if 'typing_extensions' in sys.modules:
-            del sys.modules['typing_extensions']
-        import typing_extensions
+    
+    # Remove from modules if already loaded (wrong version)
+    if 'typing_extensions' in sys.modules:
+        del sys.modules['typing_extensions']
+    
+    # Force find from site-packages
+    spec = None
+    for sp_path in sys.path:
+        if '/agents/python' not in str(sp_path):
+            try_path = os.path.join(sp_path, 'typing_extensions')
+            if os.path.exists(os.path.join(try_path, '__init__.py')) or os.path.exists(try_path + '.py'):
+                spec = importlib.util.spec_from_file_location(
+                    'typing_extensions',
+                    os.path.join(try_path, '__init__.py') if os.path.exists(os.path.join(try_path, '__init__.py')) else try_path + '.py'
+                )
+                if spec:
+                    break
+    
+    # If found, load it explicitly
+    if spec and spec.loader:
+        typing_ext = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(typing_ext)
+        sys.modules['typing_extensions'] = typing_ext
+        
         # Verify Sentinel exists
-        if hasattr(typing_extensions, 'Sentinel'):
-            print("Successfully loaded typing_extensions with Sentinel from:", spec.origin)
+        if hasattr(typing_ext, 'Sentinel'):
+            print(f"✓ Successfully pre-loaded typing_extensions with Sentinel from: {spec.origin}")
         else:
-            print("ERROR: typing_extensions loaded but Sentinel not found!")
-            raise ImportError("Sentinel not in typing_extensions")
+            # Try normal import as fallback
+            import typing_extensions
+            if not hasattr(typing_extensions, 'Sentinel'):
+                raise ImportError("typing_extensions loaded but Sentinel attribute not found")
     else:
-        print(f"ERROR: Could not find typing_extensions in site-packages. Spec: {spec}")
-        raise ImportError("typing_extensions not found in site-packages")
+        # Fallback: normal import after path fix
+        import typing_extensions
+        if not hasattr(typing_extensions, 'Sentinel'):
+            raise ImportError("Sentinel not found in typing_extensions")
+        print(f"✓ Successfully imported typing_extensions with Sentinel")
+        
 except Exception as e:
-    print(f"ERROR loading typing_extensions: {e}")
-    print(f"sys.path: {sys.path[:5]}...")
+    print(f"✗ ERROR loading typing_extensions: {e}")
+    print(f"  PYTHONPATH: {os.environ.get('PYTHONPATH', 'not set')}")
+    print(f"  sys.path (first 5): {sys.path[:5]}")
     raise
 
 from flask import Flask, request, jsonify
