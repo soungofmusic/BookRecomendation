@@ -1,29 +1,62 @@
 import sys
 import os
+import importlib.util
 
-# Remove Azure's system typing_extensions path that conflicts
-# Azure has /agents/python/typing_extensions.py which lacks Sentinel
+# CRITICAL FIX: Azure's PYTHONPATH includes /agents/python first, which has old typing_extensions
+# We need to explicitly load typing_extensions from site-packages before anything else imports it
+
+# Remove Azure's system typing_extensions from path
+if '/agents/python' in os.environ.get('PYTHONPATH', ''):
+    # Remove it from environment
+    pythonpath = os.environ.get('PYTHONPATH', '')
+    pythonpath = ':'.join([p for p in pythonpath.split(':') if '/agents/python' not in p])
+    os.environ['PYTHONPATH'] = pythonpath
+
+# Also remove from sys.path
 problematic_paths = [p for p in sys.path if '/agents/python' in str(p)]
 for path in problematic_paths:
-    sys.path.remove(path)
+    if path in sys.path:
+        sys.path.remove(path)
 
-# Force site-packages to be first
+# Force site-packages to be first - find where typing_extensions is actually installed
 import site
 site_packages = site.getsitepackages()
 if site_packages:
     for sp in site_packages:
         if sp not in sys.path:
             sys.path.insert(0, sp)
+        # Check if typing_extensions exists here
+        typing_ext_path = os.path.join(sp, 'typing_extensions.py')
+        typing_ext_init = os.path.join(sp, 'typing_extensions', '__init__.py')
+        if os.path.exists(typing_ext_path) or os.path.exists(typing_ext_init):
+            # Move this to front
+            if sp in sys.path:
+                sys.path.remove(sp)
+            sys.path.insert(0, sp)
 
-# Now import typing_extensions to verify it works
+# Pre-load typing_extensions from the correct location using importlib
 try:
-    from typing_extensions import Sentinel
-    print("Successfully imported typing_extensions with Sentinel")
-except ImportError as e:
-    print(f"Warning: typing_extensions import issue: {e}")
-    # Force reinstall in case it wasn't installed
-    import subprocess
-    subprocess.check_call([sys.executable, '-m', 'pip', 'install', '--upgrade', '--force-reinstall', 'typing_extensions==4.9.0'])
+    # Find typing_extensions module file
+    import importlib
+    spec = importlib.util.find_spec('typing_extensions')
+    if spec and spec.origin and '/agents/python' not in str(spec.origin):
+        # Force reload from correct location
+        if 'typing_extensions' in sys.modules:
+            del sys.modules['typing_extensions']
+        import typing_extensions
+        # Verify Sentinel exists
+        if hasattr(typing_extensions, 'Sentinel'):
+            print("Successfully loaded typing_extensions with Sentinel from:", spec.origin)
+        else:
+            print("ERROR: typing_extensions loaded but Sentinel not found!")
+            raise ImportError("Sentinel not in typing_extensions")
+    else:
+        print(f"ERROR: Could not find typing_extensions in site-packages. Spec: {spec}")
+        raise ImportError("typing_extensions not found in site-packages")
+except Exception as e:
+    print(f"ERROR loading typing_extensions: {e}")
+    print(f"sys.path: {sys.path[:5]}...")
+    raise
 
 from flask import Flask, request, jsonify
 import requests
