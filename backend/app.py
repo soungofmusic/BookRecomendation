@@ -220,6 +220,11 @@ def home():
 def test_endpoint():
     return jsonify({"message": "hello"})
 
+@app.route('/api/test', methods=['GET', 'POST'])
+def api_test():
+    """Test endpoint to verify /api/* routes work"""
+    return jsonify({"status": "ok", "message": "API routes are working", "method": request.method})
+
 
 class RateLimiter:
     def __init__(self, requests_per_day: int, tokens_per_minute: int):
@@ -877,7 +882,16 @@ class BookRecommender:
             return response.strip()
         return self.generate_reading_recommendation(book, input_books)
 
-recommender = BookRecommender()
+# Initialize recommender - if this fails, we'll catch it
+try:
+    recommender = BookRecommender()
+    print("✓ BookRecommender initialized successfully")
+except Exception as e:
+    print(f"✗ ERROR initializing BookRecommender: {e}")
+    import traceback
+    traceback.print_exc()
+    # Create a dummy recommender to allow app to start
+    recommender = None
 
 @app.route('/api/recommend', methods=['POST', 'OPTIONS'])  
 def get_recommendations():
