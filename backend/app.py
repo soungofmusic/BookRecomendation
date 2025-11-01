@@ -896,6 +896,7 @@ except Exception as e:
 @app.route('/api/recommend', methods=['POST', 'OPTIONS'])  
 def get_recommendations():
     # OPTIONS requests are handled by before_request handler
+    print(f"✓ Route /api/recommend called - method: {request.method}")
     try:
         print("Received recommendation request")
         data = request.json
