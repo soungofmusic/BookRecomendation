@@ -60,6 +60,15 @@ jobs:
       - name: Unzip artifact for deployment
         run: unzip release.zip
 
+      - name: Verify deployment structure
+        run: |
+          echo "Files in deployment package:"
+          ls -la
+          echo "Checking for app.py:"
+          test -f app.py && echo "✓ app.py found" || echo "✗ app.py NOT FOUND"
+          echo "Checking for requirements.txt:"
+          test -f requirements.txt && echo "✓ requirements.txt found" || echo "✗ requirements.txt NOT FOUND"
+
       
       - name: Login to Azure
         uses: azure/login@v2
