@@ -90,6 +90,4 @@ jobs:
           slot-name: 'Production'
           package: .
           restart: false
-          retry-count: 3
-          retry-interval: 30
           
