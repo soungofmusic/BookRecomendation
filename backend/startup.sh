@@ -21,6 +21,21 @@ print('PYTHONPATH:', os.environ.get('PYTHONPATH', 'not set'))
 
 # Install additional dependencies
 pip install numpy==1.24.3 pandas==1.5.3 gunicorn==20.1.0
+
+# CRITICAL: Change to the correct directory where app.py is located
+cd /home/site/wwwroot || cd /opt/startup || pwd
+
+# Verify app.py exists
+if [ ! -f app.py ]; then
+    echo "ERROR: app.py not found in current directory: $(pwd)"
+    echo "Files in current directory:"
+    ls -la
+    exit 1
+fi
+
+echo "Starting gunicorn from directory: $(pwd)"
+echo "Found app.py: $(ls -la app.py)"
+
 # Run Gunicorn with configuration
 gunicorn --bind=0.0.0.0:$PORT \
          --timeout 1200 \
