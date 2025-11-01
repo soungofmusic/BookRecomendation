@@ -15,16 +15,33 @@ import re
 load_dotenv()
 
 app = Flask(__name__)
+# Configure CORS to allow requests from the frontend domain
 CORS(app, resources={
     r"/api/*": {
         "origins": ["https://lemon-water-065707a1e.4.azurestaticapps.net"],
-        "methods": ["GET", "POST", "OPTIONS"],  # Added GET and OPTIONS
-        "allow_headers": ["Content-Type", "Accept", "Authorization"],  # Added Authorization
+        "methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Accept", "Authorization"],
         "expose_headers": ["Content-Type"],
-        "supports_credentials": True,
-        "max_age": 600  # Cache preflight requests for 10 minutes
+        "supports_credentials": False,  # Set to False since we're using credentials: 'omit' on frontend
+        "max_age": 3600  # Cache preflight requests for 1 hour
     }
 })
+
+# Add after_request handler to ensure CORS headers are always set
+@app.after_request
+def after_request(response):
+    """Add CORS headers to all responses"""
+    origin = request.headers.get('Origin')
+    allowed_origin = 'https://lemon-water-065707a1e.4.azurestaticapps.net'
+    
+    # Add CORS headers
+    if origin == allowed_origin:
+        response.headers.add('Access-Control-Allow-Origin', allowed_origin)
+    response.headers.add('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Accept, Authorization')
+    response.headers.add('Access-Control-Max-Age', '3600')
+    
+    return response
 
 if not os.environ.get("GROQ_API_KEY"):
     print("Warning: GROQ_API_KEY not found in environment variables")
@@ -708,13 +725,7 @@ recommender = BookRecommender()
 
 @app.route('/api/recommend', methods=['POST', 'OPTIONS'])  
 def get_recommendations():
-    # Handle preflight request
-    if request.method == 'OPTIONS':
-        response = jsonify({'status': 'ok'})
-        response.headers.add('Access-Control-Allow-Origin', 'https://lemon-water-065707a1e.4.azurestaticapps.net')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
-        response.headers.add('Access-Control-Allow-Methods', 'POST,OPTIONS')
-        return response
+    # flask-cors will automatically handle OPTIONS requests, but we ensure headers are set
     try:
         print("Received recommendation request")
         data = request.json
@@ -728,7 +739,9 @@ def get_recommendations():
         print(f"\n--- Starting recommendation process for books: {book_titles} (page {page}, per_page {per_page}) ---")
 
         if not book_titles:
-            return jsonify({'error': 'No books provided'}), 400
+            response = jsonify({'error': 'No books provided'})
+            response.headers.add('Access-Control-Allow-Origin', 'https://lemon-water-065707a1e.4.azurestaticapps.net')
+            return response, 400
 
         input_books = []
         input_book_ids = set()
@@ -762,7 +775,9 @@ def get_recommendations():
                         print(f"Could not get details for book: {title}")
 
             if not input_books:
-                return jsonify({'error': 'Could not process any of the input books'}), 400
+                response = jsonify({'error': 'Could not process any of the input books'})
+                response.headers.add('Access-Control-Allow-Origin', 'https://lemon-water-065707a1e.4.azurestaticapps.net')
+                return response, 400
 
             print(f"Successfully processed {len(input_books)} books")
 
@@ -830,7 +845,7 @@ def get_recommendations():
             end_idx = min(start_idx + per_page, total_recommendations)
             
             if start_idx >= total_recommendations:
-                return jsonify({
+                response = jsonify({
                     'status': 'completed',
                     'recommendations': [],
                     'pagination': {
@@ -840,6 +855,8 @@ def get_recommendations():
                         'total_pages': math.ceil(total_recommendations / per_page) or 1
                     }
                 })
+                response.headers.add('Access-Control-Allow-Origin', 'https://lemon-water-065707a1e.4.azurestaticapps.net')
+                return response
             
             paged_recommendations = all_recommendations[start_idx:end_idx]
 
@@ -902,7 +919,7 @@ def get_recommendations():
                         )
 
             # Return final JSON response with pagination metadata
-            return jsonify({
+            response = jsonify({
                 'status': 'completed',
                 'recommendations': paged_recommendations,
                 'pagination': {
@@ -912,14 +929,21 @@ def get_recommendations():
                     'total_pages': math.ceil(total_recommendations / per_page) or 1
                 }
             })
+            # Ensure CORS headers are set (flask-cors should handle this, but adding as backup)
+            response.headers.add('Access-Control-Allow-Origin', 'https://lemon-water-065707a1e.4.azurestaticapps.net')
+            return response
 
         except Exception as inner_e:
             print(f"Error in book processing: {str(inner_e)}")
-            return jsonify({'error': f'Error processing books: {str(inner_e)}'}), 500
+            response = jsonify({'error': f'Error processing books: {str(inner_e)}'})
+            response.headers.add('Access-Control-Allow-Origin', 'https://lemon-water-065707a1e.4.azurestaticapps.net')
+            return response, 500
 
     except Exception as e:
         print(f"Error generating recommendations: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        response = jsonify({'error': str(e)})
+        response.headers.add('Access-Control-Allow-Origin', 'https://lemon-water-065707a1e.4.azurestaticapps.net')
+        return response, 500
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
