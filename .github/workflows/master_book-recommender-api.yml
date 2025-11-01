@@ -74,4 +74,7 @@ jobs:
         with:
           app-name: 'book-recommender-api'
           slot-name: 'Production'
+          package: .
+          restart: false
+          start-timeout: 600
           
