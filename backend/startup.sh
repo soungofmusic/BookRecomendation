@@ -2,7 +2,7 @@
 #!/bin/bash
 # Force install typing_extensions FIRST to override Azure system version
 # Use --no-cache-dir and --ignore-installed to ensure fresh install
-pip install --no-cache-dir --ignore-installed --upgrade typing_extensions==4.9.0
+pip install --no-cache-dir --ignore-installed --upgrade "typing_extensions>=4.10,<5"
 
 # CRITICAL: Override PYTHONPATH to remove /agents/python so our typing_extensions is used
 # Azure sets PYTHONPATH with /agents/python first, which breaks imports
