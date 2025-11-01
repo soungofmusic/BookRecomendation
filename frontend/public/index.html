@@ -9,6 +9,11 @@
       name="description"
       content="Discover your next favorite book with personalized recommendations based on your reading preferences"
     />
+    <!-- Content Security Policy: Allow connections to API domain -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="connect-src 'self' https://book-recommender-api-affpgxcqgah8cvah.westus-01.azurewebsites.net https://openlibrary.org https://covers.openlibrary.org https://api.groq.com; default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:;"
+    />
     <link rel="apple-touch-icon" href="%PUBLIC_URL%/book192.png" />
     <!--
       manifest.json provides metadata used when your web app is installed on a
