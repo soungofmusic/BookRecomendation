@@ -34,10 +34,10 @@ for sp in all_site_packages:
             sys.path.remove(sp)
         sys.path.insert(0, sp)
 
-# Step 4: Pre-import typing_extensions to force it into sys.modules from correct location
-# This ensures when pydantic/groq import it, they get the correct version
+# Step 4: Pre-import typing_extensions DIRECTLY from site-packages file system
+# We can't rely on find_spec because it finds /agents/python first
+# Instead, directly search for and load the file
 try:
-    # Try to find typing_extensions in site-packages
     import importlib.util
     import importlib
     
@@ -45,44 +45,60 @@ try:
     if 'typing_extensions' in sys.modules:
         del sys.modules['typing_extensions']
     
-    # Force find from site-packages
-    spec = None
+    # Directly search for typing_extensions in site-packages (not using find_spec)
+    typing_ext_file = None
     for sp_path in sys.path:
-        if '/agents/python' not in str(sp_path):
-            try_path = os.path.join(sp_path, 'typing_extensions')
-            if os.path.exists(os.path.join(try_path, '__init__.py')) or os.path.exists(try_path + '.py'):
-                spec = importlib.util.spec_from_file_location(
-                    'typing_extensions',
-                    os.path.join(try_path, '__init__.py') if os.path.exists(os.path.join(try_path, '__init__.py')) else try_path + '.py'
-                )
-                if spec:
-                    break
+        if '/agents/python' not in str(sp_path) and 'site-packages' in str(sp_path):
+            # Check for package directory
+            package_dir = os.path.join(sp_path, 'typing_extensions')
+            init_file = os.path.join(package_dir, '__init__.py')
+            if os.path.exists(init_file):
+                typing_ext_file = init_file
+                break
+            # Check for single file
+            single_file = os.path.join(sp_path, 'typing_extensions.py')
+            if os.path.exists(single_file):
+                typing_ext_file = single_file
+                break
     
-    # If found, load it explicitly
-    if spec and spec.loader:
-        typing_ext = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(typing_ext)
-        sys.modules['typing_extensions'] = typing_ext
-        
-        # Verify Sentinel exists
-        if hasattr(typing_ext, 'Sentinel'):
-            print(f"✓ Successfully pre-loaded typing_extensions with Sentinel from: {spec.origin}")
+    if typing_ext_file:
+        # Load directly from file
+        spec = importlib.util.spec_from_file_location('typing_extensions', typing_ext_file)
+        if spec and spec.loader:
+            typing_ext = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(typing_ext)
+            sys.modules['typing_extensions'] = typing_ext
+            
+            # Verify Sentinel exists
+            if hasattr(typing_ext, 'Sentinel'):
+                print(f"✓ Successfully pre-loaded typing_extensions with Sentinel from: {typing_ext_file}")
+            else:
+                raise ImportError(f"typing_extensions loaded from {typing_ext_file} but Sentinel attribute not found")
         else:
-            # Try normal import as fallback
-            import typing_extensions
-            if not hasattr(typing_extensions, 'Sentinel'):
-                raise ImportError("typing_extensions loaded but Sentinel attribute not found")
+            raise ImportError(f"Could not create spec for typing_extensions from {typing_ext_file}")
     else:
-        # Fallback: normal import after path fix
+        # Fallback: try normal import after path is fixed
+        # But first, ensure /agents/python is definitely not in sys.path
+        sys.path = [p for p in sys.path if '/agents/python' not in str(p)]
         import typing_extensions
         if not hasattr(typing_extensions, 'Sentinel'):
             raise ImportError("Sentinel not found in typing_extensions")
-        print(f"✓ Successfully imported typing_extensions with Sentinel")
+        # Check it didn't come from /agents/python
+        typing_ext_location = getattr(typing_extensions, '__file__', '')
+        if '/agents/python' in str(typing_ext_location):
+            raise ImportError(f"typing_extensions still loading from wrong location: {typing_ext_location}")
+        print(f"✓ Successfully imported typing_extensions with Sentinel from: {typing_ext_location}")
         
 except Exception as e:
     print(f"✗ ERROR loading typing_extensions: {e}")
     print(f"  PYTHONPATH: {os.environ.get('PYTHONPATH', 'not set')}")
-    print(f"  sys.path (first 5): {sys.path[:5]}")
+    print(f"  sys.path (first 10): {sys.path[:10]}")
+    # List available typing_extensions files
+    for sp in sys.path:
+        if 'site-packages' in str(sp):
+            te_path = os.path.join(sp, 'typing_extensions')
+            if os.path.exists(te_path) or os.path.exists(te_path + '.py'):
+                print(f"  Found typing_extensions candidate at: {sp}")
     raise
 
 from flask import Flask, request, jsonify
