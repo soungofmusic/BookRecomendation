@@ -76,5 +76,4 @@ jobs:
           slot-name: 'Production'
           package: .
           restart: false
-          start-timeout: 600
           
