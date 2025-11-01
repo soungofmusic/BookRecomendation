@@ -15,31 +15,43 @@ import re
 load_dotenv()
 
 app = Flask(__name__)
-# Configure CORS to allow requests from the frontend domain
-CORS(app, resources={
-    r"/api/*": {
-        "origins": ["https://lemon-water-065707a1e.4.azurestaticapps.net"],
-        "methods": ["GET", "POST", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Accept", "Authorization"],
-        "expose_headers": ["Content-Type"],
-        "supports_credentials": False,  # Set to False since we're using credentials: 'omit' on frontend
-        "max_age": 3600  # Cache preflight requests for 1 hour
-    }
-})
 
-# Add after_request handler to ensure CORS headers are always set
+# Configure CORS to allow requests from the frontend domain
+# Using CORS with automatic options handling
+allowed_origin = 'https://lemon-water-065707a1e.4.azurestaticapps.net'
+
+CORS(app, 
+     resources={
+         r"/api/*": {
+             "origins": [allowed_origin],
+             "methods": ["GET", "POST", "OPTIONS"],
+             "allow_headers": ["Content-Type", "Accept", "Authorization"],
+             "expose_headers": ["Content-Type"],
+             "supports_credentials": False,
+             "max_age": 3600
+         }
+     },
+     automatic_options=True)  # Enable automatic OPTIONS handling
+
+# Add after_request handler as backup to ensure CORS headers are always set
 @app.after_request
 def after_request(response):
-    """Add CORS headers to all responses"""
+    """Add CORS headers to all responses (backup to flask-cors)"""
     origin = request.headers.get('Origin')
-    allowed_origin = 'https://lemon-water-065707a1e.4.azurestaticapps.net'
     
-    # Add CORS headers
-    if origin == allowed_origin:
-        response.headers.add('Access-Control-Allow-Origin', allowed_origin)
-    response.headers.add('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Accept, Authorization')
-    response.headers.add('Access-Control-Max-Age', '3600')
+    # Always add CORS headers for the allowed origin
+    if origin == allowed_origin or not origin:  # Allow requests without Origin (e.g., direct API calls)
+        response.headers['Access-Control-Allow-Origin'] = allowed_origin
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Accept, Authorization'
+        response.headers['Access-Control-Max-Age'] = '3600'
+    
+    # Ensure Access-Control-Allow-Origin is always set for preflight
+    if request.method == 'OPTIONS':
+        response.headers['Access-Control-Allow-Origin'] = allowed_origin
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Accept, Authorization'
+        response.headers['Access-Control-Max-Age'] = '3600'
     
     return response
 
@@ -725,7 +737,15 @@ recommender = BookRecommender()
 
 @app.route('/api/recommend', methods=['POST', 'OPTIONS'])  
 def get_recommendations():
-    # flask-cors will automatically handle OPTIONS requests, but we ensure headers are set
+    # Explicitly handle OPTIONS preflight requests
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
+        response.headers['Access-Control-Allow-Origin'] = allowed_origin
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Accept, Authorization'
+        response.headers['Access-Control-Max-Age'] = '3600'
+        return response
+    
     try:
         print("Received recommendation request")
         data = request.json
