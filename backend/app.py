@@ -1,10 +1,18 @@
+import sys
+import os
+# Ensure site-packages is checked before system paths for typing_extensions
+if 'site-packages' not in str(sys.path[0]) if sys.path else '':
+    import site
+    site_packages = site.getsitepackages()
+    if site_packages:
+        sys.path.insert(0, site_packages[0])
+
 from flask import Flask, request, jsonify
 import requests
 import time
 from typing import List, Dict, Any, Tuple, Optional
 from collections import Counter
 from datetime import datetime, timedelta
-import os
 from threading import Lock
 from dotenv import load_dotenv
 from groq import Groq
