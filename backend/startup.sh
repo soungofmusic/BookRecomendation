@@ -1,7 +1,10 @@
 # startup.sh
 #!/bin/bash
-# Force install typing_extensions to override Azure system version
-pip install --upgrade --force-reinstall typing_extensions==4.9.0
+# Force install typing_extensions FIRST to override Azure system version
+# Use --no-cache-dir and --ignore-installed to ensure fresh install
+pip install --no-cache-dir --ignore-installed --upgrade typing_extensions==4.9.0
+# Verify it worked
+python -c "from typing_extensions import Sentinel; print('typing_extensions Sentinel import successful')"
 # Install additional dependencies
 pip install numpy==1.24.3 pandas==1.5.3 gunicorn==20.1.0
 # Run Gunicorn with configuration

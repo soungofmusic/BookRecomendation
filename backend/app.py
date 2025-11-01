@@ -1,11 +1,29 @@
 import sys
 import os
-# Ensure site-packages is checked before system paths for typing_extensions
-if 'site-packages' not in str(sys.path[0]) if sys.path else '':
-    import site
-    site_packages = site.getsitepackages()
-    if site_packages:
-        sys.path.insert(0, site_packages[0])
+
+# Remove Azure's system typing_extensions path that conflicts
+# Azure has /agents/python/typing_extensions.py which lacks Sentinel
+problematic_paths = [p for p in sys.path if '/agents/python' in str(p)]
+for path in problematic_paths:
+    sys.path.remove(path)
+
+# Force site-packages to be first
+import site
+site_packages = site.getsitepackages()
+if site_packages:
+    for sp in site_packages:
+        if sp not in sys.path:
+            sys.path.insert(0, sp)
+
+# Now import typing_extensions to verify it works
+try:
+    from typing_extensions import Sentinel
+    print("Successfully imported typing_extensions with Sentinel")
+except ImportError as e:
+    print(f"Warning: typing_extensions import issue: {e}")
+    # Force reinstall in case it wasn't installed
+    import subprocess
+    subprocess.check_call([sys.executable, '-m', 'pip', 'install', '--upgrade', '--force-reinstall', 'typing_extensions==4.9.0'])
 
 from flask import Flask, request, jsonify
 import requests
