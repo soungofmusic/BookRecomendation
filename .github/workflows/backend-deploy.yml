@@ -1,0 +1,113 @@
+# Deploy backend API to Azure App Service
+name: Deploy Backend API to Azure App Service
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - 'backend/**'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python version
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'  # Match runtime.txt
+
+      - name: Create and start virtual environment
+        run: |
+          cd backend
+          python -m venv venv
+          source venv/bin/activate
+          pip install --upgrade pip
+
+      - name: Install dependencies
+        run: |
+          cd backend
+          source venv/bin/activate
+          pip install -r requirements.txt
+        
+      - name: Zip artifact for deployment
+        run: |
+          cd backend
+          zip -r release.zip . -x "venv/*" ".git/*" "*.pyc" "__pycache__/*" "tests/*" "static/*"
+          
+      - name: Upload artifact for deployment jobs
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-app
+          path: backend/release.zip
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    environment:
+      name: 'Production'
+      url: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
+    permissions:
+      id-token: write # Required for requesting the JWT
+
+    steps:
+      - name: Download artifact from build job
+        uses: actions/download-artifact@v4
+        with:
+          name: python-app
+
+      - name: Unzip artifact for deployment
+        run: unzip release.zip
+
+      - name: Verify deployment structure
+        run: |
+          echo "Files in deployment package:"
+          ls -la
+          echo ""
+          echo "Checking for app.py:"
+          if [ -f app.py ]; then
+            echo "✓ app.py found"
+          else
+            echo "✗ app.py NOT FOUND"
+            exit 1
+          fi
+          echo ""
+          echo "Checking for requirements.txt:"
+          if [ -f requirements.txt ]; then
+            echo "✓ requirements.txt found"
+          else
+            echo "✗ requirements.txt NOT FOUND"
+            exit 1
+          fi
+          echo ""
+          echo "Checking for startup.sh:"
+          if [ -f startup.sh ]; then
+            echo "✓ startup.sh found"
+          else
+            echo "⚠ startup.sh NOT FOUND (will use Azure default)"
+          fi
+      
+      - name: Login to Azure
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_05C2A71C0D104E46845B5B01FDFB95F9 }}
+          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_7459A7ADC4AA487595A22DCB68D9728C }}
+          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_5E1D44C4E40A42B5953878A51EF3C772 }}
+
+      - name: Wait for app to be ready
+        run: |
+          echo "Waiting 30 seconds for any Azure operations to complete..."
+          sleep 30
+
+      - name: 'Deploy to Azure Web App'
+        uses: azure/webapps-deploy@v3
+        id: deploy-to-webapp
+        with:
+          app-name: 'book-recommender-api'
+          slot-name: 'Production'
+          package: .
+          restart: false
+
