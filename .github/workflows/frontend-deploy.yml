@@ -8,6 +8,7 @@ on:
     paths:
       - 'frontend/**'
       - 'staticwebapp.config.json'
+      - '.github/workflows/frontend-deploy.yml'
   pull_request:
     types: [opened, synchronize, reopened, closed]
     branches:
