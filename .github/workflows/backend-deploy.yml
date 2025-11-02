@@ -34,6 +34,11 @@ jobs:
           source venv/bin/activate
           pip install -r requirements.txt
         
+      - name: Make startup.sh executable
+        run: |
+          cd backend
+          chmod +x startup.sh
+          
       - name: Zip artifact for deployment
         run: |
           cd backend
@@ -87,8 +92,12 @@ jobs:
           echo "Checking for startup.sh:"
           if [ -f startup.sh ]; then
             echo "✓ startup.sh found"
+            echo "Making startup.sh executable:"
+            chmod +x startup.sh
+            ls -la startup.sh
           else
-            echo "⚠ startup.sh NOT FOUND (will use Azure default)"
+            echo "✗ startup.sh NOT FOUND - this will cause deployment to fail!"
+            exit 1
           fi
       
       - name: Login to Azure

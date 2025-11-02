@@ -1,6 +1,31 @@
 #!/bin/bash
 # startup.sh - Azure App Service startup script
 
+# Get the directory where this script is located
+# This handles both when called directly and when called via bash startup.sh
+if [ -n "${BASH_SOURCE[0]}" ]; then
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+else
+    # Fallback: try common locations
+    if [ -f "/home/site/wwwroot/startup.sh" ]; then
+        SCRIPT_DIR="/home/site/wwwroot"
+    elif [ -f "./startup.sh" ]; then
+        SCRIPT_DIR="$(pwd)"
+    else
+        SCRIPT_DIR="/home/site/wwwroot"
+    fi
+fi
+
+# Change to script directory
+cd "$SCRIPT_DIR" 2>/dev/null || true
+
+echo "=== Startup Script Debug ==="
+echo "Current directory: $(pwd)"
+echo "Script directory: $SCRIPT_DIR"
+echo "Files in current directory:"
+ls -la | head -20
+echo "============================"
+
 # Force install typing_extensions to override Azure system version
 pip install --no-cache-dir --ignore-installed --upgrade "typing_extensions>=4.10,<5"
 
